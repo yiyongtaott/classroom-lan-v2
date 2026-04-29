@@ -1,0 +1,20 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: classroomlan-app
+  jackson:
+    time-zone: Asia/Shanghai
+
+app:
+  udp:
+    multicast-group: 230.0.0.1
+    port: 9999
+  websocket:
+    endpoint: /ws
+
+logging:
+  level:
+    root: info
+    org.lanclassroom: debug

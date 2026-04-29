@@ -1,0 +1,95 @@
+ClassroomLAN v2 重构设计
+一、为什么需要重构？原项目瓶颈一览
+问题	原版	v2 解决方案
+假去中心化	Leader 单点，无故障转移	多 Leader 候选 + 心跳选举 + 自动迁移
+安全缺失	无任何鉴权	启动时生成动态 RoomKey + Token，URL 携带，API 校验
+前后端强耦合	后端直接返回静态文件	彻底分离，前端独立部署，后端纯 API + WebSocket
+游戏逻辑	后端 Java 手写状态机	采用消息驱动的游戏引擎，支持插件化扩展
+代码组织	平面结构，无分层	标准 Spring Boot 多模块分层（API / Service / Core）
+实时通信	双端口（8080/8081）	统一 8080 端口，HTTP 升级 WebSocket，基于 STOMP
+用户体验	无断线提示、无状态同步	前端全局状态管理，掉线自动重连并拉取快照
+二、技术栈
+后端：Java 17, Spring Boot 3.2, Spring WebSocket (STOMP),
+
+网络发现：UDP Multicast（组播），避免广播风暴
+
+前端：Vue 3, Vite, Pinia, Vue Router, @stomp/stompjs
+
+构建：Maven 多模块，前端独立构建为静态资源，后端用 Spring Boot 打包运行
+
+交付：单一 JAR（含内嵌 Tomcat），通过 JPackage 生成 EXE
+
+三、重构后的架构
+3.1 部署拓扑
+所有节点平等启动，运行同一个 JAR。通过 UDP 组播选举 主持人（Host），其他节点自动重定向到 Host 的 Web 界面。Host 负责：
+
+房间管理
+
+游戏状态机
+
+文件存储
+
+如果 Host 离开，剩余节点重新选举，服务无缝迁移（聊天历史丢失但游戏可继续）。
+
+3.2 系统分层
+text
+backend/
+├── classroomlan-core          # 核心领域模型、接口
+├── classroomlan-net           # 网络层：UDP 发现, STOMP 消息路由
+├── classroomlan-app           # Spring Boot 启动模块，组装全部服务
+frontend/                      # 独立前端项目
+3.3 核心模块
+会话安全：生成动态 roomKey（十六进制随机串），显示在控制台。其他用户输入 roomKey 才能加入（通过 URL ?key=xxx）。Host 只接受携带正确 Token 的 WebSocket CONNECT。
+
+UDP 组播发现：定时发送 {"type":"HELLO","host":"否","id":"xxx"} 至 230.0.0.1:9999，同样接收。若一定时间内未收到更优（如更低 ID 或更高版本）的 Hello，则自荐为 Host。
+
+Host 选举优化：基于优先级（版本号 > 系统负载 > nodeId）避免羊群效应。Host 定期发送 BEAT。
+
+WebSocket 设计：使用 STOMP 子协议，通道包括：
+
+/app/chat 发送聊天
+
+/topic/chat 聊天广播
+
+/app/game.action 游戏动作
+
+/topic/game.state 游戏状态推送
+
+/user/queue/private 私信
+
+游戏抽象：GameSession 接口定义生命周期，具体游戏（你画我猜、狼人杀等）封装为 Spring Bean，动态注册。
+
+文件传输：基于 HTTP Multipart 上传，WebSocket 通知进度。文件存储在 Host 本地临时文件夹，提供下载链接。
+
+四、重构后的项目结构
+text
+classroom-lan-v2/
+├── backend/
+│   ├── pom.xml
+│   ├── classroomlan-core/
+│   │   └── src/main/java/org/lanclassroom/core/
+│   │       ├── model/            # Room, Player, GameType
+│   │       ├── service/          # 业务接口
+│   │       └── util/
+│   ├── classroomlan-net/
+│   │   └── src/main/java/org/lanclassroom/net/
+│   │       ├── discovery/        # UdpDiscovery, HostElector
+│   │       ├── ws/               # WebSocketConfig, STOMP interceptors
+│   │       └── api/              # REST controllers
+│   └── classroomlan-app/
+│       ├── pom.xml
+│       └── src/main/java/org/lanclassroom/app/
+│           ├── ClassroomLanApplication.java
+│           └── config/           # Bean 装配
+├── frontend/
+│   ├── package.json
+│   ├── vite.config.js
+│   └── src/
+│       ├── main.js
+│       ├── App.vue
+│       ├── router/
+│       ├── stores/
+│       ├── composables/
+│       ├── views/
+│       └── components/
+└── README.md

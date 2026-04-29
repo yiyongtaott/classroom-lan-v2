@@ -1,0 +1,21 @@
+# Build outputs
+*.class
+*.jar
+*.exe
+target/
+out/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/

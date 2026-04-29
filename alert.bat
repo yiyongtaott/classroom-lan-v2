@@ -1,0 +1,1 @@
+powershell -Command "$n = New-Object -ComObject WScript.Shell; $n.Popup('任务已完成！', 5, '提醒', 64)"
