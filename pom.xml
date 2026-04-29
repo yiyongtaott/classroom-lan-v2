@@ -16,13 +16,23 @@
   </modules>
 
   <properties>
-    <java.version>17</java.version>
+    <java.version>25</java.version>
     <spring-boot.version>3.2.0</spring-boot.version>
     <jackson.version>2.15.0</jackson.version>
     <slf4j.version>2.0.9</slf4j.version>
     <junit.jupiter.version>5.10.2</junit.jupiter.version>
   </properties>
-
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <release>17</release>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
   <dependencyManagement>
     <dependencies>
       <dependency>

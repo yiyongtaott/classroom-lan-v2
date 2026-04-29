@@ -23,4 +23,18 @@
     <module>classroomlan-app</module>
   </modules>
 
+  <properties>
+    <java.version>25</java.version>
+  </properties>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <release>17</release>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
 </project>
