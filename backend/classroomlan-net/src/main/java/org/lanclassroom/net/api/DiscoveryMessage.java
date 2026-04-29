@@ -3,7 +3,7 @@ package org.lanclassroom.net.api;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
- * UDP 发现消息 DTO
+ * UDP 发现消息  DTO
  */
 public class DiscoveryMessage {
     @JsonProperty("type")
