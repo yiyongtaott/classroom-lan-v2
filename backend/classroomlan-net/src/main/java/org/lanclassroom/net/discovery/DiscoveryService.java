@@ -18,7 +18,6 @@ import java.util.concurrent.*;
  */
 @Service
 public class DiscoveryService implements DisposableBean {
-
     private static final String GROUP_ADDR = "230.0.0.1";
     private static final int GROUP_PORT = 9999;
 
