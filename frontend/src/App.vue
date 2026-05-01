@@ -13,7 +13,8 @@
         <span :class="['dot', stomp.connected.value ? 'on' : 'off']" />
         {{ stomp.connected.value ? '在线' : '离线' }}
         · {{ roomStore.isHost ? 'Host' : 'Client' }}
-        · 节点 {{ short(roomStore.nodeId) }}
+        · {{ roomStore.nodeId || '—' }}
+        <span v-if="roomStore.hostname"> ({{ roomStore.hostname }})</span>
       </div>
     </header>
     <main class="app-main">
@@ -45,11 +46,6 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (pollTimer) clearInterval(pollTimer)
 })
-
-function short(id) {
-  if (!id) return '—'
-  return id.length > 8 ? id.slice(0, 8) : id
-}
 </script>
 
 <style>

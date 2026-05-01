@@ -10,7 +10,8 @@
           {{ roomStore.isHost ? 'HOST（后端）' : 'CLIENT（客户端）' }}
         </div>
         <dl>
-          <dt>节点 ID</dt><dd>{{ roomStore.nodeId || '—' }}</dd>
+          <dt>本机 IP</dt><dd>{{ roomStore.nodeId || '—' }}</dd>
+          <dt>系统名</dt><dd>{{ roomStore.hostname || '—' }}</dd>
           <dt>当前 Host</dt><dd>{{ roomStore.hostNodeId || '—' }}</dd>
           <dt>已发现节点</dt><dd>{{ roomStore.peerCount }}</dd>
         </dl>

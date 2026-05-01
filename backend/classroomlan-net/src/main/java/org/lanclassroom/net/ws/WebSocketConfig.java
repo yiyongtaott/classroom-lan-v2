@@ -33,9 +33,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+        // 纯 WebSocket（前端 stompjs 默认协议）。
+        // 不使用 SockJS：避免与 stompjs 的裸 ws:// 连接握手不一致。
         registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("*")
-                .withSockJS();
+                .setAllowedOriginPatterns("*");
     }
 
     /**

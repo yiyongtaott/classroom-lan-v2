@@ -36,6 +36,7 @@
           <version>3.11.0</version>
           <configuration>
             <release>17</release>
+            <parameters>true</parameters>
           </configuration>
         </plugin>
         <plugin>

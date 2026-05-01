@@ -25,6 +25,8 @@ app:
     auto-open-browser: true
   files:
     dir: ./files
+  avatars:
+    dir: ./avatars
 
 logging:
   level:
