@@ -25,6 +25,19 @@
           <div class="desc">扩展示例（预留）</div>
         </button>
       </div>
+
+      <div v-if="historyEntries.length" class="history">
+        <h3>历史记录 <small>（共 {{ historyEntries.length }} 条）</small></h3>
+        <ul class="log static">
+          <li v-for="(item, i) in historyEntries.slice().reverse()" :key="i" :class="String(item.stage || '').toLowerCase()">
+            <span class="stage">{{ stageLabel(item.stage) }}</span>
+            <span v-if="item.data?.playerName">{{ item.data.playerName }}</span>
+            <span v-if="item.data?.value !== undefined">猜 {{ item.data.value }}</span>
+            <span class="ts" v-if="item.ts">{{ tsLabel(item.ts) }}</span>
+          </li>
+        </ul>
+        <button class="btn small danger" @click="clearHistory">清空历史</button>
+      </div>
     </div>
 
     <div v-else-if="active === 'NUMBER_GUESS'" class="board">
@@ -39,10 +52,10 @@
 
       <div v-if="winner" class="winner">🏆 {{ winner }} 猜中！答案揭晓后请点击"停止"开始下一局。</div>
 
-      <div class="log">
+      <div class="log-box">
         <div class="aside-title">动作记录</div>
-        <ul>
-          <li v-for="(item, i) in log" :key="i" :class="item.stage.toLowerCase()">
+        <ul class="log">
+          <li v-for="(item, i) in liveLog" :key="i" :class="String(item.stage || '').toLowerCase()">
             <span class="stage">{{ stageLabel(item.stage) }}</span>
             <span v-if="item.data?.playerName">{{ item.data.playerName }}</span>
             <span v-if="item.data?.value !== undefined">猜 {{ item.data.value }}</span>
@@ -57,28 +70,37 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoomStore } from '../stores/room'
 import { useStomp } from '../composables/useStomp'
-import { TOPIC, APP } from '../appConfig'
+import { TOPIC, APP, API_BASE } from '../appConfig'
 
 const roomStore = useRoomStore()
 const stomp = useStomp()
 
 const value = ref(50)
-const log = ref([])
+const liveLog = ref([])
 const winner = ref('')
 const rounds = ref(0)
 const feedback = ref('')
 
 const active = computed(() => roomStore.gameType)
+const historyEntries = computed(() =>
+  (roomStore.gameLog || []).filter(x => x && x.gameType === 'NUMBER_GUESS')
+)
 
 let unsub = null
 
 function stageLabel(stage) {
   const map = { STARTED: '开局', LOW: '太小', HIGH: '太大', WIN: '猜中', STOPPED: '结束', INVALID: '无效' }
-  return map[stage] || stage
+  return map[stage] || stage || '—'
+}
+
+function tsLabel(ts) {
+  if (!ts) return ''
+  const d = new Date(ts)
+  return d.toLocaleString('zh-CN', { hour12: false })
 }
 
 function startGame(type) {
-  log.value = []
+  liveLog.value = []
   winner.value = ''
   feedback.value = ''
   rounds.value = 0
@@ -98,29 +120,42 @@ function guess() {
   })
 }
 
+async function clearHistory() {
+  if (!confirm('清空所有游戏历史？')) return
+  await fetch(`${API_BASE}/game/history`, { method: 'DELETE' })
+  await roomStore.loadGameHistory()
+}
+
+function applyState(state) {
+  liveLog.value.push(state)
+  if (liveLog.value.length > 50) liveLog.value.shift()
+  if (state.stage === 'WIN') {
+    winner.value = state.data?.playerName || '某玩家'
+    rounds.value = state.data?.rounds || rounds.value
+    feedback.value = `${winner.value} 在第 ${rounds.value} 回合猜中！`
+  } else if (state.stage === 'LOW') {
+    rounds.value = state.data?.rounds || rounds.value
+    feedback.value = `${state.data?.playerName} 猜了 ${state.data?.value}：太小`
+  } else if (state.stage === 'HIGH') {
+    rounds.value = state.data?.rounds || rounds.value
+    feedback.value = `${state.data?.playerName} 猜了 ${state.data?.value}：太大`
+  } else if (state.stage === 'STARTED') {
+    feedback.value = '游戏开始，范围 ' + (state.data?.range || '1-100')
+    winner.value = ''
+    rounds.value = 0
+  } else if (state.stage === 'STOPPED') {
+    feedback.value = '游戏已结束'
+  }
+}
+
 onMounted(async () => {
-  await roomStore.refreshStatus()
+  await Promise.all([
+    roomStore.refreshStatus(),
+    roomStore.loadGameHistory()
+  ])
   unsub = stomp.subscribe(TOPIC.GAME_STATE, (state) => {
     roomStore.setGameState(state)
-    log.value.push(state)
-    if (log.value.length > 50) log.value.shift()
-    if (state.stage === 'WIN') {
-      winner.value = state.data?.playerName || '某玩家'
-      rounds.value = state.data?.rounds || rounds.value
-      feedback.value = `${winner.value} 在第 ${rounds.value} 回合猜中！`
-    } else if (state.stage === 'LOW') {
-      rounds.value = state.data?.rounds || rounds.value
-      feedback.value = `${state.data?.playerName} 猜了 ${state.data?.value}：太小`
-    } else if (state.stage === 'HIGH') {
-      rounds.value = state.data?.rounds || rounds.value
-      feedback.value = `${state.data?.playerName} 猜了 ${state.data?.value}：太大`
-    } else if (state.stage === 'STARTED') {
-      feedback.value = '游戏开始，范围 ' + (state.data?.range || '1-100')
-      winner.value = ''
-      rounds.value = 0
-    } else if (state.stage === 'STOPPED') {
-      feedback.value = '游戏已结束'
-    }
+    applyState(state)
   })
 })
 
@@ -136,6 +171,7 @@ header h2 { margin: 0; color: #16a34a; }
 .active { color: #6b7280; }
 .active strong { color: #1f2937; margin-right: .5rem; }
 .lobby h3 { color: #374151; }
+.lobby h3 small { color: #9ca3af; font-weight: normal; font-size: .85rem; }
 .games { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
 .game-card { background: white; border: 2px solid #e5e7eb; border-radius: 8px; padding: 1.5rem; text-align: left; cursor: pointer; transition: all .15s; }
 .game-card:hover:not(.disabled) { border-color: #16a34a; transform: translateY(-2px); }
@@ -143,6 +179,7 @@ header h2 { margin: 0; color: #16a34a; }
 .game-card .title { font-weight: 700; font-size: 1.1rem; margin-bottom: .35rem; }
 .game-card .desc { color: #6b7280; font-size: .85rem; }
 
+.history { margin-top: 2rem; }
 .board { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.5rem; }
 .hint { display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: #f9fafb; border-radius: 6px; margin-bottom: 1rem; }
 .rounds { color: #6b7280; font-size: .9rem; }
@@ -152,15 +189,20 @@ header h2 { margin: 0; color: #16a34a; }
 .btn.small { padding: .25rem .6rem; font-size: .8rem; }
 .btn.primary { background: #16a34a; color: white; border-color: #16a34a; }
 .btn.primary:disabled { background: #9ca3af; border-color: #9ca3af; cursor: not-allowed; }
+.btn.danger { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
 .winner { margin-top: 1rem; padding: .75rem; background: #fef3c7; border: 1px solid #fde68a; border-radius: 6px; color: #92400e; }
-.log { margin-top: 1.25rem; }
+.log-box { margin-top: 1.25rem; }
 .aside-title { color: #6b7280; font-size: .8rem; text-transform: uppercase; }
-.log ul { list-style: none; padding: 0; margin: .5rem 0 0; max-height: 200px; overflow-y: auto; border: 1px solid #f3f4f6; border-radius: 6px; }
-.log li { display: flex; gap: .5rem; padding: .35rem .75rem; border-bottom: 1px solid #f3f4f6; font-size: .9rem; }
-.log li .stage { width: 60px; font-weight: 600; }
+.log { list-style: none; padding: 0; margin: .5rem 0; max-height: 240px; overflow-y: auto; border: 1px solid #f3f4f6; border-radius: 6px; background: white; }
+.log.static { max-height: 320px; }
+.log li { display: flex; gap: .5rem; padding: .35rem .75rem; border-bottom: 1px solid #f3f4f6; font-size: .9rem; align-items: center; }
+.log li:last-child { border-bottom: none; }
+.log li .stage { width: 60px; font-weight: 600; flex-shrink: 0; }
+.log li .ts { margin-left: auto; color: #9ca3af; font-size: .75rem; font-family: ui-monospace, monospace; }
 .log li.low .stage { color: #2563eb; }
 .log li.high .stage { color: #dc2626; }
 .log li.win .stage { color: #16a34a; }
 .log li.started .stage { color: #6b7280; }
+.log li.stopped .stage { color: #6b7280; }
 @media (max-width: 720px) { .games { grid-template-columns: 1fr; } }
 </style>

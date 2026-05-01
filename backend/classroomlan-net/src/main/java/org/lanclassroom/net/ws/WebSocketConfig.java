@@ -1,18 +1,19 @@
 package org.lanclassroom.net.ws;
 
 import org.lanclassroom.core.service.Broadcaster;
+import org.lanclassroom.net.service.GameHistoryService;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
-import org.springframework.context.annotation.Bean;
 
 /**
  * STOMP 消息总线配置。
  *
- * 端点：/ws （SockJS 兼容）
+ * 端点：/ws （纯 WebSocket，与 stompjs 直连）
  * 客户端 → /app/*    应用入口
  * 客户端 ← /topic/*  广播频道
  */
@@ -40,11 +41,15 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     }
 
     /**
-     * 把 SimpMessagingTemplate 适配为 core 模块的 Broadcaster 接口，
-     * 使 GameSession 不依赖 spring-messaging。
+     * 把 SimpMessagingTemplate 适配为 core 模块的 Broadcaster 接口。
+     * 同时记入 GameHistoryService（写历史 + 广播）。
      */
     @Bean
-    public Broadcaster gameStateBroadcaster(SimpMessagingTemplate template) {
-        return state -> template.convertAndSend(TOPIC_GAME_STATE, state);
+    public Broadcaster gameStateBroadcaster(SimpMessagingTemplate template,
+                                            GameHistoryService history) {
+        return state -> {
+            history.append(state);
+            template.convertAndSend(TOPIC_GAME_STATE, state);
+        };
     }
 }

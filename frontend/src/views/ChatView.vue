@@ -90,7 +90,11 @@ function shortTime(ts) {
 }
 
 onMounted(async () => {
-  await roomStore.refreshSnapshot()
+  await Promise.all([
+    roomStore.refreshSnapshot(),
+    roomStore.loadChatHistory()
+  ])
+  scrollToBottom()
   unsub = stomp.subscribe(TOPIC.CHAT, (msg) => {
     roomStore.appendMessage(msg)
     scrollToBottom()

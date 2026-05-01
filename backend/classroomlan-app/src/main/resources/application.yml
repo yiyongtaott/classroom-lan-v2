@@ -27,6 +27,8 @@ app:
     dir: ./files
   avatars:
     dir: ./avatars
+  history:
+    dir: ./data
 
 logging:
   level:

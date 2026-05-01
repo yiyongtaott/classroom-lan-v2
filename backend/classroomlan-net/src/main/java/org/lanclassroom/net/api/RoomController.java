@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -103,6 +104,26 @@ public class RoomController {
     public ResponseEntity<Void> leaveRoom(@PathVariable("id") String id) {
         room.removePlayerById(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/room/players/{id}")
+    public ResponseEntity<Player> updatePlayer(@PathVariable("id") String id,
+                                               @RequestBody Map<String, String> body) {
+        Player p = room.findById(id).orElse(null);
+        if (p == null) {
+            return ResponseEntity.notFound().build();
+        }
+        if (body != null) {
+            String name = body.get("name");
+            if (name != null && !name.isBlank()) {
+                p.setName(name.trim());
+            }
+            String avatar = body.get("avatar");
+            if (avatar != null) {
+                p.setAvatar(avatar.isBlank() ? null : avatar);
+            }
+        }
+        return ResponseEntity.ok(p);
     }
 
     @GetMapping("/games")

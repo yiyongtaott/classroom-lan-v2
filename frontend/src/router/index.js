@@ -5,7 +5,8 @@ const routes = [
   { path: '/join', name: 'join', component: () => import('../views/JoinView.vue') },
   { path: '/chat', name: 'chat', component: () => import('../views/ChatView.vue') },
   { path: '/game', name: 'game', component: () => import('../views/GameView.vue') },
-  { path: '/files', name: 'files', component: () => import('../views/FileView.vue') }
+  { path: '/files', name: 'files', component: () => import('../views/FileView.vue') },
+  { path: '/settings', name: 'settings', component: () => import('../views/SettingsView.vue') }
 ]
 
 const router = createRouter({

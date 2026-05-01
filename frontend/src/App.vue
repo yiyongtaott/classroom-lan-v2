@@ -8,6 +8,7 @@
         <router-link to="/chat" v-if="roomStore.hasJoined">聊天</router-link>
         <router-link to="/game" v-if="roomStore.hasJoined">游戏</router-link>
         <router-link to="/files" v-if="roomStore.hasJoined">文件</router-link>
+        <router-link to="/settings" v-if="roomStore.hasJoined">设置</router-link>
       </nav>
       <div class="status-pill">
         <span :class="['dot', stomp.connected.value ? 'on' : 'off']" />

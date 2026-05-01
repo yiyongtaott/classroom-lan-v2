@@ -4,12 +4,13 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 /**
- * 聊天消息 DTO。客户端发送时只填 sender + content；
- * 服务端补 timestamp 后广播。
+ * 聊天消息 DTO。客户端发送时填 sender + senderId + content；
+ * 服务端补 timestamp 后广播 + 写历史。
  */
 public class ChatMessage {
 
-    private String sender;
+    private String sender;       // 显示名
+    private String senderId;     // Player.id（用于头像查找）
     private String content;
     private String timestamp;
 
@@ -23,6 +24,9 @@ public class ChatMessage {
 
     public String getSender() { return sender; }
     public void setSender(String sender) { this.sender = sender; }
+
+    public String getSenderId() { return senderId; }
+    public void setSenderId(String senderId) { this.senderId = senderId; }
 
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
