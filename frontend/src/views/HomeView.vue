@@ -5,24 +5,27 @@
 
     <div class="grid">
       <div class="card">
-        <div class="card-title">本机角色</div>
+        <div class="card-title">本机角色（你的视角）</div>
         <div :class="['role', roomStore.isHost ? 'host' : 'client']">
-          {{ roomStore.isHost ? 'HOST（后端）' : 'CLIENT（客户端）' }}
+          {{ roomStore.isHost ? 'HOST（本机即后端）' : 'CUSTOMER（普通客户端）' }}
         </div>
         <dl>
           <dt>本机 IP</dt><dd>{{ roomStore.nodeId || '—' }}</dd>
-          <dt>系统名</dt><dd>{{ roomStore.hostname || '—' }}</dd>
-          <dt>当前 Host</dt><dd>{{ roomStore.hostNodeId || '—' }}</dd>
-          <dt>已发现节点</dt><dd>{{ roomStore.peerCount }}</dd>
+          <dt>系统名</dt>
+          <dd>{{ roomStore.hostname || (roomStore.isHost ? '—' : '（仅 Host 可知）') }}</dd>
         </dl>
       </div>
 
       <div class="card">
-        <div class="card-title">房间</div>
+        <div class="card-title">当前 Host</div>
+        <div class="role host" v-if="roomStore.hostNodeId">
+          {{ roomStore.hostHostname || 'HOST' }}
+        </div>
         <dl>
+          <dt>Host IP</dt><dd>{{ roomStore.hostNodeId || '—' }}</dd>
+          <dt>已发现节点</dt><dd>{{ roomStore.peerCount }}</dd>
           <dt>玩家数</dt><dd>{{ roomStore.players.length }}</dd>
           <dt>当前游戏</dt><dd>{{ roomStore.gameType || '空闲' }}</dd>
-          <dt>本机已加入</dt><dd>{{ roomStore.hasJoined ? roomStore.self.name : '未加入' }}</dd>
         </dl>
         <div class="actions">
           <router-link v-if="!roomStore.hasJoined" to="/join" class="btn primary">加入房间</router-link>

@@ -128,23 +128,26 @@ public class DiscoveryService implements DisposableBean {
         String selfId = NodeIdGenerator.getNodeId();
         String hostId = elector.electHost();
 
-        // 自己是 Host：本进程的 jar 已经在提供页面 → 重置 flag，不需要打开
-        if (selfId.equals(hostId)) {
-            openedForHostId = null;
-            return;
-        }
-        // 已为当前 Host 打开过 → 跳过
+        // 已为当前 Host 打开过 → 跳过（含本机刚成为 Host 的情况）
         if (hostId.equals(openedForHostId)) {
             return;
         }
-        String hostIp = nodeIpMap.get(hostId);
-        if (hostIp == null) {
-            return; // 还没收到该 Host 的报文，等下个 tick
+        // 决定打开的目标地址：
+        //   selfId == hostId → 本机 Host，直接走 localhost（避免被代理或 hosts 干扰）
+        //   否则用 nodeIpMap 拿到的远端 IP
+        String targetIp;
+        if (selfId.equals(hostId)) {
+            targetIp = "localhost";
+        } else {
+            targetIp = nodeIpMap.get(hostId);
+            if (targetIp == null) {
+                return; // 还没收到该 Host 的报文，等下个 tick
+            }
         }
-        String url = "http://" + hostIp + ":" + serverPort + "/";
+        String url = "http://" + targetIp + ":" + serverPort + "/";
         if (openBrowser(url)) {
             openedForHostId = hostId;
-            log.info("[Discovery] opened host page: {}", url);
+            log.info("[Discovery] opened host page: {} (selfIsHost={})", url, selfId.equals(hostId));
         }
     }
 

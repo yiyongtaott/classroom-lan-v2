@@ -16,15 +16,20 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.net.InetAddress;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
  * 房间 / 节点状态 REST API。
  *
- * 重要变更（Bug 3）：
- *   - status 同时返回 nodeId（=本机 IP）与 hostname（系统名），客户端用作默认昵称
- *   - 加入房间时由后端回填 player 的 ip / hostname / 默认 name（如未提供）
+ * 关键语义（Bug 2）：/api/status 返回的是"访问者视角"。
+ *   - nodeId    = 访问者本机 IP（HTTP 请求的来源 IP）
+ *   - host      = 访问者是否就是 Host 自己（同 IP 或 loopback）
+ *   - hostNodeId / hostHostname 始终代表当前 Host
+ *
+ * 这样 Host 自己用浏览器访问看到的是 HOST，
+ * 其他人访问 Host 提供的同一页面看到的是 CLIENT 且 nodeId 是自己机器的 IP。
  */
 @RestController
 @RequestMapping("/api")
@@ -41,12 +46,19 @@ public class RoomController {
     }
 
     @GetMapping("/status")
-    public ResponseEntity<Map<String, Object>> status() {
+    public ResponseEntity<Map<String, Object>> status(HttpServletRequest req) {
+        String hostIp = NodeIdGenerator.getNodeId();
+        String accessorIp = resolveClientIp(req);
+        boolean accessorIsHost = isAccessorTheHost(accessorIp, hostIp);
+
         Map<String, Object> result = new HashMap<>();
-        result.put("nodeId", NodeIdGenerator.getNodeId());
-        result.put("hostname", NodeIdGenerator.getHostname());
-        result.put("host", elector.isHost());
+        // 访问者视角
+        result.put("nodeId", accessorIsHost ? hostIp : accessorIp);
+        result.put("hostname", accessorIsHost ? NodeIdGenerator.getHostname() : null);
+        result.put("host", accessorIsHost);
+        // Host 元信息（共享）
         result.put("hostNodeId", elector.electHost());
+        result.put("hostHostname", NodeIdGenerator.getHostname());
         result.put("peerCount", elector.peerCount());
         result.put("playerCount", room.getPlayers().size());
         result.put("gameType", room.getGameType());
@@ -65,17 +77,22 @@ public class RoomController {
         String name = body == null ? null : body.get("name");
         String hostname = body == null ? null : body.get("hostname");
         String avatar = body == null ? null : body.get("avatar");
-        String clientIp = resolveClientIp(req);
+        String accessorIp = resolveClientIp(req);
 
-        // 默认昵称：客户端 hostname / 客户端 IP / "玩家"
+        // 显示用 IP：访问者是 Host 时取本机 IP，否则取 HTTP 来源 IP
+        String displayIp = isAccessorTheHost(accessorIp, NodeIdGenerator.getNodeId())
+                ? NodeIdGenerator.getNodeId()
+                : accessorIp;
+
+        // 默认昵称：客户端 hostname / IP / "玩家"
         String finalName = (name != null && !name.isBlank())
                 ? name
                 : (hostname != null && !hostname.isBlank()
                     ? hostname
-                    : (clientIp != null ? clientIp : "玩家"));
+                    : (displayIp != null ? displayIp : "玩家"));
 
         Player player = new Player(finalName)
-                .setIp(clientIp)
+                .setIp(displayIp)
                 .setHostname(hostname)
                 .setAvatar(avatar);
         room.addPlayer(player);
@@ -103,5 +120,16 @@ public class RoomController {
             return forwarded.split(",")[0].trim();
         }
         return req.getRemoteAddr();
+    }
+
+    /** 访问者是否就是 Host 自己（同 IP / loopback）。 */
+    private static boolean isAccessorTheHost(String accessorIp, String hostIp) {
+        if (accessorIp == null) return false;
+        if (accessorIp.equals(hostIp)) return true;
+        try {
+            return InetAddress.getByName(accessorIp).isLoopbackAddress();
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

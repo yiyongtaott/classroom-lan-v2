@@ -12,7 +12,7 @@
       <div class="status-pill">
         <span :class="['dot', stomp.connected.value ? 'on' : 'off']" />
         {{ stomp.connected.value ? '在线' : '离线' }}
-        · {{ roomStore.isHost ? 'Host' : 'Client' }}
+        · {{ roomStore.isHost ? 'HOST' : 'CUSTOMER' }}
         · {{ roomStore.nodeId || '—' }}
         <span v-if="roomStore.hostname"> ({{ roomStore.hostname }})</span>
       </div>

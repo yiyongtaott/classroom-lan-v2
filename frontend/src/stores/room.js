@@ -3,12 +3,13 @@ import { ref, computed } from 'vue'
 import { API_BASE } from '../appConfig'
 
 export const useRoomStore = defineStore('room', () => {
-  // —— 本机身份 ——
+  // —— 本机身份（访问者视角，由 /api/status 给出）——
   const self = ref(JSON.parse(localStorage.getItem('self') || 'null'))
   const isHost = ref(false)
-  const nodeId = ref('')        // = 本机 IP
-  const hostname = ref('')      // 本机系统名
+  const nodeId = ref('')        // 访问者 IP（本机）
+  const hostname = ref('')      // 访问者 hostname（仅 Host 自己访问时有值）
   const hostNodeId = ref('')    // 当前 Host 的 IP
+  const hostHostname = ref('')  // 当前 Host 的系统名
   const peerCount = ref(0)
 
   // —— 房间状态 ——
@@ -38,6 +39,7 @@ export const useRoomStore = defineStore('room', () => {
     nodeId.value = json.nodeId
     hostname.value = json.hostname
     hostNodeId.value = json.hostNodeId
+    hostHostname.value = json.hostHostname
     peerCount.value = json.peerCount
     gameType.value = json.gameType
     return json
@@ -105,7 +107,7 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   return {
-    self, isHost, nodeId, hostname, hostNodeId, peerCount, hasJoined,
+    self, isHost, nodeId, hostname, hostNodeId, hostHostname, peerCount, hasJoined,
     players, messages, gameType, lastGameState, files,
     setSelf, clearSelf, refreshStatus, refreshSnapshot,
     joinAs, uploadAvatar, leave,
