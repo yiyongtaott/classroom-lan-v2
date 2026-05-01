@@ -33,7 +33,6 @@ public class DiscoveryMessage {
         this.nodeId = nodeId;
         this.timestamp = System.currentTimeMillis();
     }
-
     // Getters & Setters
     public String getType() { return type; }
     public DiscoveryMessage setType(String type) { this.type = type; return this; }

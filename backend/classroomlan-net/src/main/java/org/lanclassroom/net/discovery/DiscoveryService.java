@@ -71,12 +71,22 @@ public class DiscoveryService implements DisposableBean {
         Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
         while (interfaces.hasMoreElements()) {
             NetworkInterface ni = interfaces.nextElement();
-            // 必须：处于开启状态、非回环接口(不是127.0.0.1)、支持组播
+
+            // 必须：开启状态、非回环、支持组播
             if (ni.isUp() && !ni.isLoopback() && ni.supportsMulticast()) {
-                return ni;
+                // 关键修复：确保该网卡至少有一个 IPv4 地址
+                Enumeration<InetAddress> addresses = ni.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress addr = addresses.nextElement();
+                    // 检查是否为 IPv4 地址
+                    if (addr instanceof Inet4Address) {
+                        System.out.println("[Discovery] Successfully bound to IPv4 interface: " + ni.getDisplayName());
+                        return ni;
+                    }
+                }
             }
         }
-        // fallback 兜底方案
+        // 如果实在找不到，回退到默认（可能会抛异常，但这是最后的尝试）
         return NetworkInterface.getByInetAddress(InetAddress.getLocalHost());
     }
 
@@ -100,6 +110,7 @@ public class DiscoveryService implements DisposableBean {
     }
 
     private void receiveLoop() {
+
         byte[] buffer = new byte[2048];
         System.out.println("[Discovery] UDP Receiver thread started.");
         while (!socket.isClosed()) {
