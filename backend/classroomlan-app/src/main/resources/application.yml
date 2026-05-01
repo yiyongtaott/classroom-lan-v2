@@ -22,6 +22,7 @@ app:
     hello-interval-ms: 2000
   discovery:
     peer-ttl-ms: 6000
+    auto-open-browser: true
   files:
     dir: ./files
 
