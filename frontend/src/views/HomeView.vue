@@ -1,61 +1,67 @@
 <template>
-  <div class="home">
-    <h1>Classroom LAN v2</h1>
-    <p>教室局域网实时协作平台</p>
-    <div class="actions">
-      <router-link v-if="!hasKey" to="/join" class="btn">加入房间</router-link>
-      <router-link v-else to="/chat" class="btn">进入聊天室</router-link>
+  <section class="home">
+    <h1>ClassroomLAN v2</h1>
+    <p class="tagline">局域网内自动选主的实时娱乐系统</p>
+
+    <div class="grid">
+      <div class="card">
+        <div class="card-title">本机角色</div>
+        <div :class="['role', roomStore.isHost ? 'host' : 'client']">
+          {{ roomStore.isHost ? 'HOST（后端）' : 'CLIENT（客户端）' }}
+        </div>
+        <dl>
+          <dt>节点 ID</dt><dd>{{ roomStore.nodeId || '—' }}</dd>
+          <dt>当前 Host</dt><dd>{{ roomStore.hostNodeId || '—' }}</dd>
+          <dt>已发现节点</dt><dd>{{ roomStore.peerCount }}</dd>
+        </dl>
+      </div>
+
+      <div class="card">
+        <div class="card-title">房间</div>
+        <dl>
+          <dt>玩家数</dt><dd>{{ roomStore.players.length }}</dd>
+          <dt>当前游戏</dt><dd>{{ roomStore.gameType || '空闲' }}</dd>
+          <dt>本机已加入</dt><dd>{{ roomStore.hasJoined ? roomStore.self.name : '未加入' }}</dd>
+        </dl>
+        <div class="actions">
+          <router-link v-if="!roomStore.hasJoined" to="/join" class="btn primary">加入房间</router-link>
+          <router-link v-else to="/chat" class="btn primary">进入聊天</router-link>
+          <button @click="refresh" class="btn">刷新</button>
+        </div>
+      </div>
     </div>
-    <div v-if="hasKey" class="room-info">
-      <p>当前房间密钥: <code>{{ roomKey }}</code></p>
-    </div>
-  </div>
+  </section>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { onMounted } from 'vue'
+import { useRoomStore } from '../stores/room'
 
-const roomKey = ref(localStorage.getItem('roomKey') || '')
-const hasKey = computed(() => !!roomKey.value)
+const roomStore = useRoomStore()
+
+async function refresh() {
+  await Promise.all([roomStore.refreshStatus(), roomStore.refreshSnapshot()])
+}
+
+onMounted(refresh)
 </script>
 
 <style scoped>
-.home {
-  max-width: 600px;
-  margin: 3rem auto;
-  text-align: center;
-}
-.home h1 {
-  color: #42b983;
-  font-size: 2.5rem;
-  margin-bottom: 0.5rem;
-}
-.actions {
-  margin-top: 2rem;
-}
-.btn {
-  display: inline-block;
-  padding: 0.75rem 2rem;
-  background: #42b983;
-  color: white;
-  border-radius: 6px;
-  text-decoration: none;
-  font-weight: 500;
-  transition: background 0.2s;
-}
-.btn:hover {
-  background: #369c70;
-}
-.room-info {
-  margin-top: 2rem;
-  padding: 1rem;
-  background: #f5f5f5;
-  border-radius: 6px;
-}
-.room-info code {
-  font-family: monospace;
-  background: #e0e0e0;
-  padding: 0.2rem 0.5rem;
-  border-radius: 4px;
-}
+.home { max-width: 900px; margin: 0 auto; }
+h1 { color: #16a34a; margin-bottom: .25rem; }
+.tagline { color: #6b7280; margin-top: 0; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 2rem; }
+.card { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem; }
+.card-title { font-weight: 600; color: #6b7280; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; margin-bottom: .75rem; }
+.role { font-size: 1.25rem; font-weight: 700; padding: .5rem .8rem; border-radius: 6px; display: inline-block; margin-bottom: .75rem; }
+.role.host { background: #dcfce7; color: #15803d; }
+.role.client { background: #dbeafe; color: #1d4ed8; }
+dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: .25rem .75rem; }
+dt { color: #6b7280; font-size: .85rem; }
+dd { margin: 0; font-family: ui-monospace, monospace; word-break: break-all; }
+.actions { margin-top: 1rem; display: flex; gap: .5rem; }
+.btn { padding: .5rem 1rem; border-radius: 6px; border: 1px solid #d1d5db; background: white; text-decoration: none; color: #1f2937; }
+.btn.primary { background: #16a34a; color: white; border-color: #16a34a; }
+.btn.primary:hover { background: #15803d; }
+@media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
 </style>

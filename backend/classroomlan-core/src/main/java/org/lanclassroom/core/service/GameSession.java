@@ -7,32 +7,31 @@ import org.lanclassroom.core.model.Room;
 import java.util.Map;
 
 /**
- * 游戏会话接口 - 定义游戏生命周期
- * 具体游戏（你画我猜、狼人杀等）需实现此接口作为 Spring Bean 注册
+ * 游戏会话抽象 - 单一游戏的生命周期。
+ * 扩展新游戏只需实现该接口并注册为 Spring Bean。
+ *
+ * 调用顺序约定：
+ *   1. start(room, broadcaster)  - 进入游戏
+ *   2. handleAction(player, ...) - 处理客户端动作（可重复）
+ *   3. stop()                    - 结束游戏
+ *
+ * 实现需保证 handleAction 在 stop 之后调用为 no-op。
  */
 public interface GameSession {
 
-    /**
-     * 启动游戏
-     * @param room 房间对象
-     */
-    void start(Room room);
+    /** 游戏类型 - 注册键 */
+    GameType getType();
 
     /**
-     * 处理玩家动作
-     * @param player 操作玩家
-     * @param payload 动作载荷（游戏相关参数）
+     * 启动游戏。GameSession 应保存 broadcaster 以便后续广播状态。
+     */
+    void start(Room room, Broadcaster broadcaster);
+
+    /**
+     * 处理玩家动作。payload 由具体游戏定义结构。
      */
     void handleAction(Player player, Map<String, Object> payload);
 
-    /**
-     * 停止游戏
-     */
+    /** 结束游戏，释放资源。 */
     void stop();
-
-    /**
-     * 获取游戏类型
-     * @return GameType 枚举值
-     */
-    GameType getType();
 }

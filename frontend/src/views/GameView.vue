@@ -1,186 +1,166 @@
 <template>
-  <div class="game">
+  <section class="game">
     <header>
-      <h2>游戏大厅</h2>
-      <span>当前游戏：{{ displayGameType }}</span>
+      <h2>游戏</h2>
+      <div class="active" v-if="active">
+        当前游戏：<strong>{{ active }}</strong>
+        <button class="btn small" @click="stopGame">停止</button>
+      </div>
+      <div class="active" v-else>当前空闲</div>
     </header>
 
-    <div class="game-area">
-      <div v-if="!gameStarted" class="game-menu">
-        <h3>选择游戏</h3>
-        <div class="menu-grid">
-          <button @click="selectGame('DRAW')">🎨 你画我猜</button>
-          <button @click="selectGame('WEREWOLF')" disabled>🐺 狼人杀（开发中）</button>
-          <button @click="selectGame('QUIZ')" disabled>📝 抢答（开发中）</button>
-        </div>
-      </div>
-
-      <div v-else class="game-board">
-        <div class="game-header">
-          <button @click="endGame" class="btn-end">结束游戏</button>
-        </div>
-        <div v-if="currentGame === 'DRAW'" class="draw-game">
-          <canvas ref="canvas" width="600" height="400" class="draw-canvas"></canvas>
-          <div class="draw-tools">
-            <input type="color" v-model="drawColor" />
-            <input type="range" v-model="drawSize" min="1" max="20" />
-            <button @click="clearCanvas">清空</button>
-          </div>
-          <p class="hint">提示词：{{ hintWord || '等待开始...' }}</p>
-        </div>
+    <div v-if="!active" class="lobby">
+      <h3>选择游戏</h3>
+      <div class="games">
+        <button class="game-card" @click="startGame('NUMBER_GUESS')">
+          <div class="title">🎯 猜数字</div>
+          <div class="desc">范围 1–100，最快猜中获胜</div>
+        </button>
+        <button class="game-card disabled" disabled>
+          <div class="title">🎨 你画我猜</div>
+          <div class="desc">扩展示例（预留）</div>
+        </button>
+        <button class="game-card disabled" disabled>
+          <div class="title">📝 抢答</div>
+          <div class="desc">扩展示例（预留）</div>
+        </button>
       </div>
     </div>
-  </div>
+
+    <div v-else-if="active === 'NUMBER_GUESS'" class="board">
+      <div class="hint">
+        <div>{{ feedback || '猜一个 1–100 之间的整数' }}</div>
+        <div class="rounds">回合：{{ rounds }}</div>
+      </div>
+      <form class="input" @submit.prevent="guess">
+        <input v-model.number="value" type="number" min="1" max="100" :disabled="winner !== ''" />
+        <button class="btn primary" :disabled="winner !== '' || !Number.isInteger(value)">提交</button>
+      </form>
+
+      <div v-if="winner" class="winner">🏆 {{ winner }} 猜中！答案揭晓后请点击"停止"开始下一局。</div>
+
+      <div class="log">
+        <div class="aside-title">动作记录</div>
+        <ul>
+          <li v-for="(item, i) in log" :key="i" :class="item.stage.toLowerCase()">
+            <span class="stage">{{ stageLabel(item.stage) }}</span>
+            <span v-if="item.data?.playerName">{{ item.data.playerName }}</span>
+            <span v-if="item.data?.value !== undefined">猜 {{ item.data.value }}</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoomStore } from '../stores/room'
+import { useStomp } from '../composables/useStomp'
+import { TOPIC, APP } from '../appConfig'
 
 const roomStore = useRoomStore()
+const stomp = useStomp()
 
-const gameStarted = ref(false)
-const currentGame = ref(null)
-const hintWord = ref('苹果')
-const drawColor = ref('#000000')
-const drawSize = ref(3)
-const canvas = ref(null)
+const value = ref(50)
+const log = ref([])
+const winner = ref('')
+const rounds = ref(0)
+const feedback = ref('')
 
-const displayGameType = computed(() => {
-  const map = { DRAW: '你画我猜', WEREWOLF: '狼人杀', QUIZ: '抢答' }
-  return map[roomStore.gameType] || '未选择'
+const active = computed(() => roomStore.gameType)
+
+let unsub = null
+
+function stageLabel(stage) {
+  const map = { STARTED: '开局', LOW: '太小', HIGH: '太大', WIN: '猜中', STOPPED: '结束', INVALID: '无效' }
+  return map[stage] || stage
+}
+
+function startGame(type) {
+  log.value = []
+  winner.value = ''
+  feedback.value = ''
+  rounds.value = 0
+  stomp.publish(APP.GAME_START, { type })
+}
+
+function stopGame() {
+  stomp.publish(APP.GAME_STOP, {})
+}
+
+function guess() {
+  if (!Number.isInteger(value.value)) return
+  stomp.publish(APP.GAME_ACTION, {
+    action: 'GUESS',
+    value: value.value,
+    playerId: roomStore.self?.id
+  })
+}
+
+onMounted(async () => {
+  await roomStore.refreshStatus()
+  unsub = stomp.subscribe(TOPIC.GAME_STATE, (state) => {
+    roomStore.setGameState(state)
+    log.value.push(state)
+    if (log.value.length > 50) log.value.shift()
+    if (state.stage === 'WIN') {
+      winner.value = state.data?.playerName || '某玩家'
+      rounds.value = state.data?.rounds || rounds.value
+      feedback.value = `${winner.value} 在第 ${rounds.value} 回合猜中！`
+    } else if (state.stage === 'LOW') {
+      rounds.value = state.data?.rounds || rounds.value
+      feedback.value = `${state.data?.playerName} 猜了 ${state.data?.value}：太小`
+    } else if (state.stage === 'HIGH') {
+      rounds.value = state.data?.rounds || rounds.value
+      feedback.value = `${state.data?.playerName} 猜了 ${state.data?.value}：太大`
+    } else if (state.stage === 'STARTED') {
+      feedback.value = '游戏开始，范围 ' + (state.data?.range || '1-100')
+      winner.value = ''
+      rounds.value = 0
+    } else if (state.stage === 'STOPPED') {
+      feedback.value = '游戏已结束'
+    }
+  })
 })
 
-function selectGame(type) {
-  currentGame.value = type
-  gameStarted.value = true
-  roomStore.setGameType(type)
-
-  // TODO: 发送游戏启动消息到后端
-  if (type === 'DRAW') {
-    nextTick(initCanvas)
-  }
-}
-
-function endGame() {
-  gameStarted.value = false
-  currentGame.value = null
-  roomStore.setGameType(null)
-  // TODO: 发送游戏结束消息
-}
-
-function initCanvas() {
-  const ctx = canvas.value.getContext('2d')
-  ctx.fillStyle = '#fff'
-  ctx.fillRect(0, 0, canvas.value.width, canvas.value.height)
-
-  canvas.value.addEventListener('mousedown', startDraw)
-  canvas.value.addEventListener('mousemove', draw)
-  canvas.value.addEventListener('mouseup', stopDraw)
-  canvas.value.addEventListener('mouseleave', stopDraw)
-}
-
-let drawing = false
-
-function startDraw(e) {
-  drawing = true
-  const ctx = canvas.value.getContext('2d')
-  ctx.beginPath()
-  ctx.moveTo(e.offsetX, e.offsetY)
-}
-
-function draw(e) {
-  if (!drawing) return
-  const ctx = canvas.value.getContext('2d')
-  ctx.strokeStyle = drawColor.value
-  ctx.lineWidth = drawSize.value
-  ctx.lineCap = 'round'
-  ctx.lineTo(e.offsetX, e.offsetY)
-  ctx.stroke()
-}
-
-function stopDraw() {
-  drawing = false
-}
-
-function clearCanvas() {
-  const ctx = canvas.value.getContext('2d')
-  ctx.fillStyle = '#fff'
-  ctx.fillRect(0, 0, canvas.value.width, canvas.value.height)
-}
-
-onMounted(() => {
-  // 游戏视图挂载时准备 STOMP 订阅（如游戏状态更新）
+onBeforeUnmount(() => {
+  if (unsub) unsub()
 })
 </script>
 
 <style scoped>
-.game {
-  max-width: 800px;
-  margin: 2rem auto;
-  padding: 1rem;
-}
-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-}
-.game-menu .menu-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1rem;
-}
-.game-menu button {
-  padding: 2rem;
-  font-size: 1.2rem;
-  background: #fff;
-  border: 2px solid #42b983;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.game-menu button:disabled {
-  border-color: #ccc;
-  color: #ccc;
-  cursor: not-allowed;
-}
-.game-menu button:hover:not(:disabled) {
-  background: #42b983;
-  color: white;
-}
-.game-board {
-  border: 1px solid #eee;
-  border-radius: 8px;
-  padding: 1rem;
-}
-.game-header {
-  margin-bottom: 1rem;
-}
-.btn-end {
-  padding: 0.5rem 1rem;
-  background: #f56c6c;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.draw-canvas {
-  border: 1px solid #ddd;
-  background: white;
-  display: block;
-  margin: 1rem auto;
-}
-.draw-tools {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  justify-content: center;
-  margin: 1rem 0;
-}
-.hint {
-  text-align: center;
-  font-size: 1.2rem;
-  color: #666;
-}
+.game { max-width: 900px; margin: 0 auto; }
+header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+header h2 { margin: 0; color: #16a34a; }
+.active { color: #6b7280; }
+.active strong { color: #1f2937; margin-right: .5rem; }
+.lobby h3 { color: #374151; }
+.games { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+.game-card { background: white; border: 2px solid #e5e7eb; border-radius: 8px; padding: 1.5rem; text-align: left; cursor: pointer; transition: all .15s; }
+.game-card:hover:not(.disabled) { border-color: #16a34a; transform: translateY(-2px); }
+.game-card.disabled { opacity: .5; cursor: not-allowed; }
+.game-card .title { font-weight: 700; font-size: 1.1rem; margin-bottom: .35rem; }
+.game-card .desc { color: #6b7280; font-size: .85rem; }
+
+.board { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.5rem; }
+.hint { display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: #f9fafb; border-radius: 6px; margin-bottom: 1rem; }
+.rounds { color: #6b7280; font-size: .9rem; }
+.input { display: flex; gap: .5rem; }
+.input input { flex: 1; padding: .55rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 1.1rem; }
+.btn { padding: .55rem 1.1rem; border-radius: 6px; border: 1px solid #d1d5db; background: white; color: #1f2937; }
+.btn.small { padding: .25rem .6rem; font-size: .8rem; }
+.btn.primary { background: #16a34a; color: white; border-color: #16a34a; }
+.btn.primary:disabled { background: #9ca3af; border-color: #9ca3af; cursor: not-allowed; }
+.winner { margin-top: 1rem; padding: .75rem; background: #fef3c7; border: 1px solid #fde68a; border-radius: 6px; color: #92400e; }
+.log { margin-top: 1.25rem; }
+.aside-title { color: #6b7280; font-size: .8rem; text-transform: uppercase; }
+.log ul { list-style: none; padding: 0; margin: .5rem 0 0; max-height: 200px; overflow-y: auto; border: 1px solid #f3f4f6; border-radius: 6px; }
+.log li { display: flex; gap: .5rem; padding: .35rem .75rem; border-bottom: 1px solid #f3f4f6; font-size: .9rem; }
+.log li .stage { width: 60px; font-weight: 600; }
+.log li.low .stage { color: #2563eb; }
+.log li.high .stage { color: #dc2626; }
+.log li.win .stage { color: #16a34a; }
+.log li.started .stage { color: #6b7280; }
+@media (max-width: 720px) { .games { grid-template-columns: 1fr; } }
 </style>

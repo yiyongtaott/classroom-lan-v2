@@ -1,0 +1,144 @@
+ClassroomLAN v2 设计文档（AI 精简版）
+1. 核心变更
+1.1 架构本质
+不是去中心化
+所有节点启动后：
+通过局域网发现彼此
+选举出一个中心节点（Host）
+其他节点作为客户端连接该 Host
+
+👉 本质模型：
+
+多节点启动 → 选举 → 单中心后端 → 多客户端
+1.2 安全策略（重要）
+完全移除所有安全机制
+无：
+鉴权
+Token
+RoomKey
+加密
+默认前提：
+所有用户可信
+仅用于私人娱乐
+2. 技术栈
+
+后端
+
+Java 17
+Spring Boot 3.x
+WebSocket（STOMP）
+
+前端
+
+Vue 3 + Vite
+Pinia + Vue Router
+stompjs
+
+网络
+
+UDP Multicast（节点发现 + 选举）
+3. 系统架构
+3.1 启动流程
+1. 所有节点启动
+2. UDP 广播自身信息
+3. 执行 Host 选举
+4. 选出唯一 Host
+5. 其他节点连接 Host
+3.2 Host 职责（唯一后端）
+房间管理
+游戏状态管理
+消息广播
+文件存储
+WebSocket 服务
+3.3 客户端职责
+连接 Host
+发送操作（聊天 / 游戏）
+接收状态同步
+3.4 Host 故障处理
+Host 离线 →
+剩余节点重新选举 →
+产生新 Host →
+客户端重连
+
+说明：
+
+状态可能丢失（允许）
+不做一致性保证
+4. 网络与通信
+4.1 节点发现（UDP）
+
+周期发送：
+
+{
+  "type": "HELLO",
+  "id": "nodeId",
+  "version": "v2"
+}
+
+用途：
+
+发现节点
+参与选举
+4.2 Host 选举
+
+简单规则（避免复杂性）：
+
+优先级：
+1. version
+2. nodeId
+
+结果：
+
+选出唯一 Host
+4.3 WebSocket 设计
+
+使用 STOMP：
+
+/app/chat          → 发送聊天
+/topic/chat        → 广播聊天
+
+/app/game.action   → 游戏操作
+/topic/game.state  → 游戏状态
+
+/user/queue        → 私有消息（可选）
+5. 游戏架构
+5.1 核心抽象
+GameSession
+
+职责：
+
+管理游戏生命周期
+处理玩家输入
+输出状态
+5.2 扩展方式
+每个游戏 = 一个实现类
+注册为 Spring Bean
+运行时选择
+6. 文件传输
+HTTP 上传（Multipart）
+Host 本地存储
+WebSocket 通知进度
+7. 项目结构
+backend/
+├── core        # 领域模型、接口
+├── net         # 网络（UDP + WebSocket）
+├── app         # 启动与配置
+
+frontend/
+├── src/
+│   ├── views
+│   ├── components
+│   ├── stores
+8. 设计取舍（给 AI 的关键理解）
+简化点
+无安全
+无分布式一致性
+无数据持久保证
+核心目标
+局域网娱乐
+快速启动
+低复杂度
+易扩展游戏
+9. 一句话总结
+
+这是一个“局域网内自动选主的单后端实时游戏系统”，而不是分布式系统。

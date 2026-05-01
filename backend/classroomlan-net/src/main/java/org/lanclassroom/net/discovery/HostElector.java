@@ -1,141 +1,110 @@
 package org.lanclassroom.net.discovery;
 
-import org.lanclassroom.core.model.Room;
-import org.lanclassroom.core.util.NodeIdGenerator;
-import org.lanclassroom.net.api.DiscoveryMessage;
-import org.springframework.stereotype.Component;
-
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.Comparator;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.LongSupplier;
 
 /**
- * Host 选举器 - 决定当前节点是否成为 Host
- * 优先级：版本号（高）> 系统负载（低）> nodeId（最后）
+ * Host 选举器 - 纯逻辑，无 IO，可独立单测。
+ *
+ * 算法：
+ *   1. 维护一个 peer 注册表 {id → (version, lastSeenMs)}
+ *   2. 每次询问 isHost(nowMs)：
+ *      - 清理 nowMs - lastSeen &gt; peerTtlMs 的节点
+ *      - 把自己加入候选集
+ *      - 按 (version DESC, id ASC) 排序，第一名即 Host
+ *      - 当前节点是否就是 Host？
+ *
+ * 这是"纯一致性视图"算法：所有节点收到的 HELLO 集合一致 → 算出的 Host 一致。
+ * 故障重选自动发生：旧 Host 停止发 HELLO → 6s 后被所有节点剔除 → 重新选举。
  */
-@Component
 public class HostElector {
 
-    private static final String VERSION = "2.0.0";
+    private final String selfId;
+    private final String selfVersion;
+    private final long peerTtlMs;
+    private final LongSupplier clock;
 
-    private final AtomicBoolean isHost = new AtomicBoolean(false);
-    private final AtomicReference<String> currentNodeId = new AtomicReference<>(NodeIdGenerator.getNodeId());
-    private final AtomicReference<String> currentRoomKey = new AtomicReference<>();
-    private final AtomicReference<Long> lastBeatTimestamp = new AtomicReference<>(System.currentTimeMillis());
+    private final Map<String, PeerInfo> peers = new ConcurrentHashMap<>();
 
-    private volatile Room room;
+    public HostElector(String selfId, String selfVersion, long peerTtlMs) {
+        this(selfId, selfVersion, peerTtlMs, System::currentTimeMillis);
+    }
 
-    /**
-     * 处理收到的消息
-     */
-    public void onMessage(DiscoveryMessage msg) {
-        if (msg == null) {
-            // 本地触发：检查心跳超时，降级为非 Host
-            if (isHost.get()) {
-                isHost.set(false);
-                System.out.println("[HostElector] Host timeout, stepping down");
-            }
+    public HostElector(String selfId, String selfVersion, long peerTtlMs, LongSupplier clock) {
+        this.selfId = Objects.requireNonNull(selfId);
+        this.selfVersion = Objects.requireNonNull(selfVersion);
+        this.peerTtlMs = peerTtlMs;
+        this.clock = clock;
+    }
+
+    /** 收到来自其他节点的 HELLO（自己的 HELLO 应被 DiscoveryService 过滤掉）。 */
+    public void onPeer(String peerId, String peerVersion) {
+        if (peerId == null || peerId.equals(selfId)) {
             return;
         }
-
-        String type = msg.getType();
-        if ("HELLO".equals(type)) {
-            evaluateHello(msg);
-        } else if ("BEAT".equals(type)) {
-            updateHostBeat(msg);
-        }
+        peers.put(peerId, new PeerInfo(peerVersion == null ? "" : peerVersion, clock.getAsLong()));
     }
 
-    /**
-     * 评估 HELLO 消息 - 决定是否成为 Host
-     * 优先级：版本号 > systemLoad > nodeId（字母序）
-     */
-    private synchronized void evaluateHello(DiscoveryMessage msg) {
-        boolean msgIsHost = msg.isHost();
-        String msgNodeId = msg.getNodeId();
+    /** 返回当前应当作为 Host 的节点 id。 */
+    public String electHost() {
+        long now = clock.getAsLong();
+        peers.entrySet().removeIf(e -> now - e.getValue().lastSeenMs > peerTtlMs);
 
-        if (isHost.get()) {
-            // 自己已是 Host
-            if (!msgIsHost) {
-                // 收到非 Host 的 HELLO，维持 Host 身份
-                // 发送 BEAT 宣告
-            } else {
-                // 收到其他 Host 的 HELLO - 比较优先级
-                if (isHigherPriority(msgNodeId)) {
-                    isHost.set(false);
-                }
-            }
-        } else {
-            // 自己不是 Host
-            if (!msgIsHost) {
-                // 如果收到另一个非 Host 的 HELLO，比较决定谁成为 Host
-                if (shouldBecomeHost(msgNodeId)) {
-                    isHost.set(true);
-                    currentRoomKey.set(generateRoomKey());
-                    System.out.println("[HostElector] This node becomes Host, roomKey=" + currentRoomKey.get());
-                }
-            } else {
-                // 已存在 Host，跟随
+        Comparator<PeerInfo> cmp = Comparator
+                .comparing((PeerInfo p) -> p.version, Comparator.reverseOrder())  // version DESC
+                .thenComparing(p -> p.id);                                         // id ASC
+
+        PeerInfo winner = new PeerInfo(selfId, selfVersion, now);
+        for (Map.Entry<String, PeerInfo> e : peers.entrySet()) {
+            PeerInfo candidate = new PeerInfo(e.getKey(), e.getValue().version, e.getValue().lastSeenMs);
+            if (cmp.compare(candidate, winner) < 0) {
+                winner = candidate;
             }
         }
+        return winner.id;
     }
 
-    /**
-     * 判断自己是否应该成为 Host（比较 nodeId 和版本）
-     */
-    private boolean shouldBecomeHost(String otherNodeId) {
-        // 简单策略：nodeId 较小者胜出（字母序）
-        // 版本相同的情况下
-        String myId = currentNodeId.get();
-        return myId.compareTo(otherNodeId) < 0;
-    }
-
-    /**
-     * 判断 msgNodeId 是否比当前 nodeId 优先级更高
-     */
-    private boolean isHigherPriority(String msgNodeId) {
-        // 版本相同，nodeId 更小者优先
-        String myId = currentNodeId.get();
-        return msgNodeId.compareTo(myId) < 0;
-    }
-
-    /**
-     * 更新 Host 心跳
-     */
-    private synchronized void updateHostBeat(DiscoveryMessage msg) {
-        lastBeatTimestamp.set(System.currentTimeMillis());
-
-        if (isHost.get() && !msg.getNodeId().equals(currentNodeId.get())) {
-            // 自己是 Host，但收到其他节点的 BEAT（可能是版本更高）
-            isHost.set(false);
-        }
-    }
-
+    /** 当前节点是否是 Host。 */
     public boolean isHost() {
-        return isHost.get();
+        return selfId.equals(electHost());
     }
 
-    public String getNodeId() {
-        return currentNodeId.get();
+    public String getSelfId() { return selfId; }
+    public String getSelfVersion() { return selfVersion; }
+
+    /** 已知存活 peer 数量（不含自己）。 */
+    public int peerCount() {
+        long now = clock.getAsLong();
+        peers.entrySet().removeIf(e -> now - e.getValue().lastSeenMs > peerTtlMs);
+        return peers.size();
     }
 
-    public String getRoomKey() {
-        return currentRoomKey.get();
+    /** 测试 / 监控用：返回 peer 快照。 */
+    public Map<String, PeerInfo> snapshotPeers() {
+        return Map.copyOf(peers);
     }
 
-    public Room getRoom() {
-        return room;
-    }
+    public static final class PeerInfo {
+        public final String id;
+        public final String version;
+        public final long lastSeenMs;
 
-    public void setRoom(Room room) {
-        this.room = room;
-    }
+        PeerInfo(String version, long lastSeenMs) {
+            this.id = null;
+            this.version = version;
+            this.lastSeenMs = lastSeenMs;
+        }
 
-    public long getLastBeatTimestamp() {
-        return lastBeatTimestamp.get();
-    }
+        PeerInfo(String id, String version, long lastSeenMs) {
+            this.id = id;
+            this.version = version;
+            this.lastSeenMs = lastSeenMs;
+        }
 
-    private String generateRoomKey() {
-        // 16 位十六进制随机串
-        return Long.toHexString(Double.doubleToLongBits(Math.random()));
+        public String getVersion() { return version; }
+        public long getLastSeenMs() { return lastSeenMs; }
     }
 }

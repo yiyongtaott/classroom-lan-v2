@@ -2,52 +2,47 @@ package org.lanclassroom.core.model;
 
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Room 实体测试
- */
-public class RoomTest {
+class RoomTest {
 
     @Test
-    void generateRoomKey_returnsNonEmptyHexString() {
-        // Given & When
-        String key = Room.generateRoomKey();
+    void newPlayer_isAdded_andFindable() {
+        Room room = new Room();
+        Player alice = new Player("Alice");
 
-        // Then
-        assertNotNull(key);
-        assertTrue(key.length() > 0);
+        room.addPlayer(alice);
+
+        assertEquals(1, room.getPlayers().size());
+        assertTrue(room.findById(alice.getId()).isPresent());
     }
 
     @Test
-    void snapshot_containsCurrentState() {
-        // Given
+    void removePlayer_removesByExactId() {
         Room room = new Room();
-        room.setRoomKey("test-key");
-        room.setGameType(GameType.DRAW);
-        Player player = new Player("Player1");
-        room.getPlayers().add(player);
+        Player alice = new Player("Alice");
+        room.addPlayer(alice);
 
-        // When
+        boolean removed = room.removePlayerById(alice.getId());
+
+        assertTrue(removed);
+        assertEquals(0, room.getPlayers().size());
+    }
+
+    @Test
+    void snapshot_capturesState() {
+        Room room = new Room();
+        room.setHostNodeId("node-1");
+        room.setGameType(GameType.NUMBER_GUESS);
+        room.addPlayer(new Player("Bob"));
+
         RoomSnapshot snap = room.snapshot();
 
-        // Then
-        assertEquals("test-key", snap.getRoomKey());
-        assertEquals(GameType.DRAW, snap.getGameType());
-        assertEquals(1, snap.getPlayers().size());
-        assertTrue(snap.isActive());
-    }
-
-    @Test
-    void addPlayer_increasesPlayerCount() {
-        // Given
-        Room room = new Room();
-
-        // When
-        room.getPlayers().add(new Player("Alice"));
-        room.getPlayers().add(new Player("Bob"));
-
-        // Then
-        assertEquals(2, room.getPlayers().size());
+        assertNotNull(snap);
+        assertEquals("node-1", snap.getHostNodeId());
+        assertEquals(GameType.NUMBER_GUESS, snap.getGameType());
+        assertEquals(1, snap.getPlayerCount());
     }
 }

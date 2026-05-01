@@ -1,182 +1,111 @@
 <template>
-  <div class="chat">
-    <header>
-      <h2>聊天室</h2>
-      <span :class="['status', connected ? 'online' : 'offline']">
-        {{ connected ? '在线' : '离线' }}
-      </span>
+  <section class="chat">
+    <header class="ch-head">
+      <h2>聊天</h2>
+      <span class="me">我: <strong>{{ roomStore.self?.name || '未加入' }}</strong></span>
     </header>
 
-    <div class="players-sidebar">
-      <h3>在线玩家 ({{ players.length }})</h3>
-      <ul>
-        <li v-for="player in players" :key="player.id">
-          {{ player.name }} {{ player.isHost ? '(房主)' : '' }}
-        </li>
-      </ul>
-    </div>
+    <div class="layout">
+      <aside class="players">
+        <div class="aside-title">在线玩家 ({{ roomStore.players.length }})</div>
+        <ul>
+          <li v-for="p in roomStore.players" :key="p.id" :class="{ self: p.id === roomStore.self?.id }">
+            {{ p.name }}<span v-if="p.id === roomStore.self?.id" class="tag">我</span>
+          </li>
+        </ul>
+      </aside>
 
-    <div class="chat-main">
-      <div class="messages" ref="msgContainer">
-        <div v-for="(msg, idx) in messages" :key="idx" class="msg">
-          <strong>{{ msg.senderName }}:</strong>
-          <span>{{ msg.content }}</span>
-          <small>{{ msg.timestamp }}</small>
+      <div class="main">
+        <div class="messages" ref="msgBox">
+          <div v-for="(m, i) in roomStore.messages" :key="i" class="msg" :class="{ mine: m.sender === roomStore.self?.name }">
+            <div class="meta"><strong>{{ m.sender }}</strong> <small>{{ shortTime(m.timestamp) }}</small></div>
+            <div class="body">{{ m.content }}</div>
+          </div>
+          <div v-if="roomStore.messages.length === 0" class="empty">暂无消息</div>
         </div>
+        <form class="input" @submit.prevent="send">
+          <input v-model="text" placeholder="输入消息，回车发送" :disabled="!stomp.connected.value" />
+          <button class="btn primary" :disabled="!stomp.connected.value || !text.trim()">发送</button>
+        </form>
       </div>
-
-      <form @submit.prevent="sendMessage" class="input-area">
-        <input
-          v-model="newMessage"
-          placeholder="输入消息..."
-          autocomplete="off"
-          :disabled="!connected"
-        />
-        <button type="submit" :disabled="!connected || !newMessage.trim()">发送</button>
-      </form>
     </div>
-  </div>
+  </section>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
-import { useStomp } from '../composables/useStomp'
+import { onMounted, onBeforeUnmount, ref, nextTick } from 'vue'
 import { useRoomStore } from '../stores/room'
+import { useStomp } from '../composables/useStomp'
+import { TOPIC, APP } from '../appConfig'
 
-const { client, connected, subscribe, publish, connect } = useStomp()
 const roomStore = useRoomStore()
+const stomp = useStomp()
 
-const newMessage = ref('')
-const msgContainer = ref(null)
-const players = computed(() => roomStore.players)
-const messages = computed(() => roomStore.messages)
+const text = ref('')
+const msgBox = ref(null)
+let unsub = null
+let snapshotTimer = null
 
-let chatSubscription = null
-
-onMounted(() => {
-  connect()
-
-  // 订阅聊天频道
-  chatSubscription = subscribe('/topic/chat', (msg) => {
-    const data = JSON.parse(msg.body)
-    roomStore.addMessage(data)
-    scrollToBottom()
+function send() {
+  const content = text.value.trim()
+  if (!content) return
+  stomp.publish(APP.CHAT_SEND, {
+    sender: roomStore.self?.name || '匿名',
+    content
   })
-
-  // TODO: 拉取历史消息（可通过 REST API）
-})
-
-onUnmounted(() => {
-  if (chatSubscription) chatSubscription.unsubscribe()
-})
-
-function sendMessage() {
-  if (!newMessage.value.trim()) return
-
-  const payload = {
-    sender: localStorage.getItem('nickname') || 'Anonymous',
-    content: newMessage.value.trim()
-  }
-
-  publish('/app/chat', payload)
-  newMessage.value = ''
+  text.value = ''
 }
 
 function scrollToBottom() {
   nextTick(() => {
-    if (msgContainer.value) {
-      msgContainer.value.scrollTop = msgContainer.value.scrollHeight
-    }
+    if (msgBox.value) msgBox.value.scrollTop = msgBox.value.scrollHeight
   })
 }
+
+function shortTime(ts) {
+  if (!ts) return ''
+  const idx = ts.indexOf('T')
+  return idx > 0 ? ts.slice(idx + 1, idx + 9) : ts
+}
+
+onMounted(async () => {
+  await roomStore.refreshSnapshot()
+  unsub = stomp.subscribe(TOPIC.CHAT, (msg) => {
+    roomStore.appendMessage(msg)
+    scrollToBottom()
+  })
+  snapshotTimer = setInterval(() => roomStore.refreshSnapshot().catch(() => {}), 5000)
+})
+
+onBeforeUnmount(() => {
+  if (unsub) unsub()
+  if (snapshotTimer) clearInterval(snapshotTimer)
+})
 </script>
 
 <style scoped>
-.chat {
-  display: flex;
-  height: calc(100vh - 100px);
-}
-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-  margin-bottom: 1rem;
-}
-.status {
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  font-size: 0.85rem;
-}
-.status.online {
-  background: #42b983;
-  color: white;
-}
-.status.offline {
-  background: #f56c6c;
-  color: white;
-}
-.players-sidebar {
-  width: 200px;
-  padding: 1rem;
-  background: #f9f9f9;
-  border-right: 1px solid #eee;
-}
-.players-sidebar ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-.players-sidebar li {
-  padding: 0.25rem 0;
-}
-.chat-main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 1rem;
-}
-.messages {
-  flex: 1;
-  overflow-y: auto;
-  border: 1px solid #eee;
-  padding: 1rem;
-  margin-bottom: 1rem;
-  background: #fff;
-}
-.msg {
-  margin-bottom: 0.5rem;
-  line-height: 1.4;
-}
-.msg strong {
-  color: #333;
-}
-.msg small {
-  margin-left: 0.5rem;
-  color: #999;
-  font-size: 0.75rem;
-}
-.input-area {
-  display: flex;
-  gap: 0.5rem;
-}
-input {
-  flex: 1;
-  padding: 0.6rem;
-  font-size: 1rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-}
-button {
-  padding: 0.6rem 1.2rem;
-  background: #42b983;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-button:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-}
+.chat { max-width: 1000px; margin: 0 auto; }
+.ch-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 1rem; }
+.ch-head h2 { margin: 0; color: #16a34a; }
+.me { color: #6b7280; font-size: .9rem; }
+.layout { display: grid; grid-template-columns: 220px 1fr; gap: 1rem; height: 65vh; }
+.players { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem; overflow-y: auto; }
+.aside-title { color: #6b7280; font-size: .8rem; text-transform: uppercase; margin-bottom: .5rem; }
+.players ul { list-style: none; padding: 0; margin: 0; }
+.players li { padding: .35rem 0; border-bottom: 1px dashed #f3f4f6; }
+.players li.self { color: #15803d; font-weight: 600; }
+.tag { background: #dcfce7; color: #15803d; font-size: .7rem; padding: .1rem .4rem; border-radius: 4px; margin-left: .35rem; }
+.main { display: flex; flex-direction: column; background: white; border: 1px solid #e5e7eb; border-radius: 8px; }
+.messages { flex: 1; overflow-y: auto; padding: 1rem; }
+.msg { padding: .5rem 0; border-bottom: 1px solid #f3f4f6; }
+.msg.mine .meta strong { color: #16a34a; }
+.msg .meta { font-size: .8rem; color: #6b7280; margin-bottom: .15rem; }
+.msg .body { word-wrap: break-word; }
+.empty { color: #9ca3af; padding: 2rem; text-align: center; }
+.input { display: flex; gap: .5rem; padding: .75rem; border-top: 1px solid #e5e7eb; }
+.input input { flex: 1; padding: .55rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 1rem; }
+.btn { padding: .55rem 1.1rem; border-radius: 6px; border: 1px solid #d1d5db; background: white; color: #1f2937; }
+.btn.primary { background: #16a34a; color: white; border-color: #16a34a; }
+.btn.primary:disabled { background: #9ca3af; border-color: #9ca3af; cursor: not-allowed; }
+@media (max-width: 720px) { .layout { grid-template-columns: 1fr; height: auto; } }
 </style>

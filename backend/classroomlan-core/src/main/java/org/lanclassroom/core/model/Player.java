@@ -3,14 +3,15 @@ package org.lanclassroom.core.model;
 import java.util.UUID;
 
 /**
- * 玩家实体
+ * 玩家实体（极简版 - 无 roomKey/token 字段）。
  */
 public class Player {
-    private String id;          // 玩家唯一标识（UUID）
-    private String name;        // 玩家昵称
-    private boolean host;       // 是否为房主
-    private long joinTime;      // 加入时间戳
-    private String roomKey;     // 所在房间密钥
+    private String id;
+    private String name;
+    private boolean host;
+    private long joinTime;
+
+    public Player() {}
 
     public Player(String name) {
         this.id = UUID.randomUUID().toString();
@@ -19,19 +20,15 @@ public class Player {
         this.joinTime = System.currentTimeMillis();
     }
 
-    // Getters & Setters
     public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
+    public Player setId(String id) { this.id = id; return this; }
 
     public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public Player setName(String name) { this.name = name; return this; }
 
     public boolean isHost() { return host; }
-    public void setHost(boolean host) { this.host = host; }
+    public Player setHost(boolean host) { this.host = host; return this; }
 
     public long getJoinTime() { return joinTime; }
-    public void setJoinTime(long joinTime) { this.joinTime = joinTime; }
-
-    public String getRoomKey() { return roomKey; }
-    public void setRoomKey(String roomKey) { this.roomKey = roomKey; }
+    public Player setJoinTime(long joinTime) { this.joinTime = joinTime; return this; }
 }

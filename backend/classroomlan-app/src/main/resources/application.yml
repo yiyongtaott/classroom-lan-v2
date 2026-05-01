@@ -1,18 +1,29 @@
 server:
   port: 8080
+  forward-headers-strategy: framework
 
 spring:
   application:
     name: classroomlan-app
   jackson:
     time-zone: Asia/Shanghai
+    default-property-inclusion: non_null
+  servlet:
+    multipart:
+      max-file-size: 200MB
+      max-request-size: 200MB
+  mvc:
+    static-path-pattern: /**
 
 app:
   udp:
     multicast-group: 230.0.0.1
     port: 9999
-  websocket:
-    endpoint: /ws
+    hello-interval-ms: 2000
+  discovery:
+    peer-ttl-ms: 6000
+  files:
+    dir: ./files
 
 logging:
   level:

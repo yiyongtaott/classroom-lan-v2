@@ -15,7 +15,7 @@
   <packaging>pom</packaging>
 
   <name>ClassroomLAN Backend</name>
-  <description>Backend multi-module project: core, net, app</description>
+  <description>Backend multi-module: core (domain), net (UDP+STOMP+REST), app (boot)</description>
 
   <modules>
     <module>classroomlan-core</module>
@@ -23,18 +23,4 @@
     <module>classroomlan-app</module>
   </modules>
 
-  <properties>
-    <java.version>25</java.version>
-  </properties>
-  <build>
-    <plugins>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-compiler-plugin</artifactId>
-        <configuration>
-          <release>25</release>
-        </configuration>
-      </plugin>
-    </plugins>
-  </build>
 </project>
