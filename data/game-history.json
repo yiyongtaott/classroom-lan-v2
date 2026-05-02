@@ -276,4 +276,21 @@
     }
   },
   "ts" : 1777724241330
+}, {
+  "gameType" : "DRAW",
+  "stage" : "SELECTING",
+  "data" : {
+    "drawerName" : "flandretiamat",
+    "drawerId" : "7b8979df-a680-456f-aed5-75f56744b62f"
+  },
+  "ts" : 1777725083299
+}, {
+  "gameType" : "DRAW",
+  "stage" : "GAME_OVER",
+  "data" : {
+    "scores" : {
+      "7b8979df-a680-456f-aed5-75f56744b62f" : 0
+    }
+  },
+  "ts" : 1777725092838
 } ]
