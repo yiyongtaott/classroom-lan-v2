@@ -293,4 +293,20 @@
     }
   },
   "ts" : 1777725092838
+}, {
+  "gameType" : "NUMBER_GUESS",
+  "stage" : "STARTED",
+  "data" : {
+    "range" : "1-100"
+  },
+  "playerCount" : 1,
+  "ts" : 1777725739867
+}, {
+  "gameType" : "NUMBER_GUESS",
+  "stage" : "STOPPED",
+  "data" : {
+    "rounds" : 0
+  },
+  "playerCount" : 1,
+  "ts" : 1777725752511
 } ]

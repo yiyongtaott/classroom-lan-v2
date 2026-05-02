@@ -3,7 +3,6 @@ package org.lanclassroom.net.service;
 import org.lanclassroom.core.model.Player;
 import org.lanclassroom.core.model.Room;
 import org.lanclassroom.net.discovery.DiscoveryService;
-import org.lanclassroom.net.ws.ClientSessionRegistry;
 import org.lanclassroom.net.ws.WebSocketConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,23 +17,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * 玩家会话计数器 - 维护 STOMP session ↔ playerId 映射，刷新 player.status。
- *
- * 与 {@link ClientSessionRegistry} 的区别：
- *   - ClientSessionRegistry 只维护 session ↔ ip
- *   - ConnectionTracker 维护 session ↔ playerId（业务身份层）
- *
- * 玩家上线流程：
- *   POST /api/room/players                → 创建 Player（status=ONLINE, sessionCount=0）
- *   /app/player.online {playerId}         → bind(sessionId, playerId)，sessionCount++
- *   STOMP DISCONNECT                      → decrementSession，若为 0 则 PAGE_CLOSED
- *   IP 离开 DiscoveryService 已知集合     → 从 Room 移除
- */
 @Component
 public class ConnectionTracker {
 
     private static final Logger log = LoggerFactory.getLogger(ConnectionTracker.class);
+
+    private static final long OFFLINE_GRACE_MS = 15_000; // 15 秒全灰宽限期
 
     private final Room room;
     private final DiscoveryService discovery;
@@ -42,6 +30,8 @@ public class ConnectionTracker {
     private final UserStatusService userStatus;
 
     private final Map<String, String> sessionToPlayer = new ConcurrentHashMap<>();
+    // 记录玩家首次进入全灰状态的时间戳（毫秒）
+    private final Map<String, Long> offlineSince = new ConcurrentHashMap<>();
 
     public ConnectionTracker(Room room, DiscoveryService discovery,
                              SimpMessagingTemplate messaging,
@@ -55,7 +45,6 @@ public class ConnectionTracker {
     /** 客户端通过 /app/player.online 帧主动绑定。 */
     public void bind(String sessionId, String playerId) {
         if (sessionId == null || playerId == null) return;
-        // 防重：同 session 已绑定 → 不重复 increment
         String prev = sessionToPlayer.put(sessionId, playerId);
         if (prev != null) {
             room.findById(prev).ifPresent(Player::decrementSession);
@@ -84,22 +73,40 @@ public class ConnectionTracker {
     }
 
     /**
-     * 每 4s 检查一次：
-     *   - Player.ip 已不在 DiscoveryService 已知 IP 集合 → 后端 jar 已下线 → OFFLINE → 移除
+     * 每 4 秒检查一次所有玩家的三维状态。
+     * 若 backendAlive、wsAlive、pageActive 连续 15 秒全部为 false，则移除该玩家。
      */
     @Scheduled(fixedRate = 4000)
     public void cleanup() {
-        Set<String> alive = discovery.knownIps();
+        long now = System.currentTimeMillis();
         boolean changed = false;
+
         for (Player p : new HashSet<>(room.getPlayers())) {
-            if (p.getIp() != null && !alive.contains(p.getIp())) {
-                log.info("[ConnTrack] removing offline player {} (ip={})", p.getName(), p.getIp());
-                p.setStatus(Player.STATUS_OFFLINE);
-                userStatus.setWsAlive(p.getId(), false);
-                room.removePlayerById(p.getId());
-                changed = true;
+            String pid = p.getId();
+            if (pid == null) continue;
+
+            UserStatusService.UserStatusRecord status = userStatus.getRecord(pid);
+            boolean allOffline = status == null ||
+                    (!status.isBackendAlive() && !status.isWsAlive() && !status.isPageActive());
+
+            if (allOffline) {
+                // 记录首次全灰时间（如果之前没记录）
+                offlineSince.putIfAbsent(pid, now);
+                long offlineStart = offlineSince.get(pid);
+                if (now - offlineStart >= OFFLINE_GRACE_MS) {
+                    log.info("[ConnTrack] removing idle player {} (ip={})", p.getName(), p.getIp());
+                    p.setStatus(Player.STATUS_OFFLINE);
+                    userStatus.setWsAlive(pid, false);
+                    room.removePlayerById(pid);
+                    offlineSince.remove(pid);
+                    changed = true;
+                }
+            } else {
+                // 任意状态活跃 → 清除全灰记录
+                offlineSince.remove(pid);
             }
         }
+
         if (changed) {
             broadcastPlayers();
         }

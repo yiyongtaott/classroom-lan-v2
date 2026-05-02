@@ -69,14 +69,12 @@ export const useRoomStore = defineStore('room', () => {
 
   /** 启动时优先 GET /api/me（按 IP 同账号）。 */
   async function bootstrap(hostnameFallback) {
-    try {
       const res = await fetch(`${API_BASE}/me`)
       if (res.ok) {
         const me = await res.json()
         setSelf(me)
         return me
       }
-    } catch {}
     if (self.value) {
       await ensurePresence(hostnameFallback)
     }

@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.awt.Desktop;
@@ -36,17 +37,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * UDP 组播发现服务。
  * 职责：
- *   1. 启动时 join multicast group
- *   2. 每 2s 广播一次 HELLO（携带 nodeId / version / 当前 host 信仰 / hostname）
- *   3. 接收回路解析 HELLO → 更新 HostElector + 维护 ip↔node 关联表 + UDP 心跳计入 UserStatusService
- *   4. 周期判断：本机非 Host 时自动打开浏览器跳到 Host 的前端页面
+ * 1. 启动时 join multicast group
+ * 2. 每 2s 广播一次 HELLO（携带 nodeId / version / 当前 host 信仰 / hostname）
+ * 3. 接收回路解析 HELLO → 更新 HostElector + 维护 ip↔node 关联表 + UDP 心跳计入 UserStatusService
+ * 4. 周期判断：本机非 Host 时自动打开浏览器跳到 Host 的前端页面
  */
 @Service
 public class DiscoveryService implements DisposableBean {
 
     public static final Logger log = LoggerFactory.getLogger(DiscoveryService.class);
     public static final String VERSION = "v2";
-
+    private final SimpMessagingTemplate messaging;
     private final Room room;
 
     @Value("${app.udp.multicast-group:230.0.0.1}")
@@ -65,12 +66,18 @@ public class DiscoveryService implements DisposableBean {
     private boolean autoOpenBrowser;
 
     private final HostElector elector;
-    /** 用 ObjectProvider 避免与 UserStatusService 之间的循环依赖。 */
+    /**
+     * 用 ObjectProvider 避免与 UserStatusService 之间的循环依赖。
+     */
     private final ObjectProvider<UserStatusService> userStatusProvider;
     private final ObjectMapper mapper = new ObjectMapper();
-    /** nodeId → 该节点的源 IP（用于打开 Host 前端页面）。 */
+    /**
+     * nodeId → 该节点的源 IP（用于打开 Host 前端页面）。
+     */
     private final Map<String, String> nodeIpMap = new ConcurrentHashMap<>();
-    /** IP → 该节点的 hostname（Bug 10：用于在 host 端展示客户端的系统名）。 */
+    /**
+     * IP → 该节点的 hostname（Bug 10：用于在 host 端展示客户端的系统名）。
+     */
     private final Map<String, String> ipHostnameMap = new ConcurrentHashMap<>();
 
     private volatile String openedForHostId = null;
@@ -82,10 +89,11 @@ public class DiscoveryService implements DisposableBean {
     private Thread receiverThread;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
-    public DiscoveryService(HostElector elector, ObjectProvider<UserStatusService> userStatusProvider,Room room) {
+    public DiscoveryService(HostElector elector, ObjectProvider<UserStatusService> userStatusProvider, Room room,SimpMessagingTemplate messaging) {
         this.elector = elector;
         this.userStatusProvider = userStatusProvider;
         this.room = room;
+        this.messaging = messaging;
     }
 
     @PostConstruct
@@ -115,6 +123,18 @@ public class DiscoveryService implements DisposableBean {
                 networkInterface != null ? networkInterface.getName() : "default",
                 NodeIdGenerator.getNodeId(),
                 serverPort);
+        // 注册 Host 变更监听器，实时通知所有客户端
+        elector.addListener((isHost, hostId) -> {
+            Map<String, Object> msg = Map.of(
+                    "type", "HOST_CHANGED",
+                    "newHostId", hostId,
+                    "isSelf", isHost
+            );
+            messaging.convertAndSend("/topic/host", msg);
+            log.info("[Discovery] broadcasted HOST_CHANGED: newHost={}, isSelf={}", hostId, isHost);
+        });
+        // 启动后立即触发一次重选举并广播自身状态
+        elector.forceReelectAndNotify();
     }
 
     private void tick() {
@@ -148,6 +168,7 @@ public class DiscoveryService implements DisposableBean {
             }
         }
     }
+
 
     private void maybeOpenHostPage() {
         String selfId = NodeIdGenerator.getNodeId();
@@ -235,7 +256,9 @@ public class DiscoveryService implements DisposableBean {
         }
     }
 
-    /** Bug 10：通过 IP 查 hostname（让 host 知道客户端的系统名）。 */
+    /**
+     * Bug 10：通过 IP 查 hostname（让 host 知道客户端的系统名）。
+     */
     public String hostnameByIp(String ip) {
         if (ip == null) return null;
         // 自身 IP → 返回本机 hostname
@@ -245,7 +268,9 @@ public class DiscoveryService implements DisposableBean {
         return ipHostnameMap.get(ip);
     }
 
-    /** 当前已知活跃节点 IP 集合（含 self），供玩家清理。 */
+    /**
+     * 当前已知活跃节点 IP 集合（含 self），供玩家清理。
+     */
     public java.util.Set<String> knownIps() {
         java.util.Set<String> set = new java.util.HashSet<>(nodeIpMap.values());
         set.add(NodeIdGenerator.getNodeId());
