@@ -16,6 +16,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.messaging.SessionConnectedEvent;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
+import org.springframework.web.socket.messaging.SessionSubscribeEvent;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -83,8 +84,27 @@ public class WebSocketEventListener {
             // ws 状态推送 - 只要任意 session 在线，该 ip 关联的 player 即 wsAlive=true
             Optional<Player> p = room.findByIp(clientIp);
             p.ifPresent(player -> userStatus.setWsAlive(player.getId(), true));
+        }
+    }
 
-            sendInitSnapshot(sessionId, clientIp);
+    @EventListener
+    public void onSubscribe(SessionSubscribeEvent event) {
+        SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.wrap(event.getMessage());
+        String sessionId = headers.getSessionId();
+        String destination = headers.getDestination();
+
+        // 只处理 init 队列的订阅，并且每个会话只发一次
+        if (destination != null && destination.endsWith("/queue/init")) {
+            // 从 ClientSessionRegistry 或其他地方获取之前存下的 clientIp
+            String clientIp = registry.getIpBySession(sessionId);
+            if (clientIp != null) {
+                // 主动查一次 player，确保状态更新
+                Player p = room.findByIp(clientIp).orElse(null);
+                if (p != null) {
+                    userStatus.setWsAlive(p.getId(), true);
+                    sendInitSnapshot(sessionId, clientIp);
+                }
+            }
         }
     }
 
