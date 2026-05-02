@@ -3,17 +3,31 @@ package org.lanclassroom.core.model;
 import java.util.UUID;
 
 /**
- * 玩家实体（极简版 - 无 roomKey/token 字段）。
- * avatar 为 host 服务路径，如 "/api/avatars/&lt;playerId&gt;"，没上传时为 null。
+ * 玩家实体（极简版）。
+ * status 取值：
+ *   ONLINE       - 浏览器活跃 + 后端 jar 在线
+ *   PAGE_CLOSED  - 浏览器关了，但后端 jar 仍在 LAN（保留账号信息）
+ *   OFFLINE      - 后端 jar 也下线（即将清除）
  */
 public class Player {
+
+    public static final String STATUS_ONLINE = "ONLINE";
+    public static final String STATUS_PAGE_CLOSED = "PAGE_CLOSED";
+    public static final String STATUS_OFFLINE = "OFFLINE";
+
     private String id;
     private String name;
-    private String hostname;     // 系统名（默认显示）
-    private String ip;           // 客户端 IP（host 在加入时回填）
-    private String avatar;       // 头像访问 URL（host 提供）
+    private String hostname;
+    private String ip;
+    private String avatar;
     private boolean host;
     private long joinTime;
+    /** 在线状态 - {@link #STATUS_ONLINE} / {@link #STATUS_PAGE_CLOSED} / {@link #STATUS_OFFLINE} */
+    private String status = STATUS_ONLINE;
+    /** 最近一次 WebSocket 活跃时间（ms） */
+    private long lastSeenMs;
+    /** 当前已连接的 STOMP session 数（>0 表示至少有一个浏览器开着该账号） */
+    private int sessionCount;
 
     public Player() {}
 
@@ -22,6 +36,7 @@ public class Player {
         this.name = name;
         this.host = false;
         this.joinTime = System.currentTimeMillis();
+        this.lastSeenMs = this.joinTime;
     }
 
     public String getId() { return id; }
@@ -44,4 +59,28 @@ public class Player {
 
     public long getJoinTime() { return joinTime; }
     public Player setJoinTime(long joinTime) { this.joinTime = joinTime; return this; }
+
+    public String getStatus() { return status; }
+    public Player setStatus(String status) { this.status = status; return this; }
+
+    public long getLastSeenMs() { return lastSeenMs; }
+    public Player setLastSeenMs(long lastSeenMs) { this.lastSeenMs = lastSeenMs; return this; }
+
+    public int getSessionCount() { return sessionCount; }
+    public Player setSessionCount(int sessionCount) { this.sessionCount = sessionCount; return this; }
+
+    public Player incrementSession() {
+        this.sessionCount++;
+        this.status = STATUS_ONLINE;
+        this.lastSeenMs = System.currentTimeMillis();
+        return this;
+    }
+
+    public Player decrementSession() {
+        if (sessionCount > 0) sessionCount--;
+        if (sessionCount == 0) {
+            this.status = STATUS_PAGE_CLOSED;
+        }
+        return this;
+    }
 }

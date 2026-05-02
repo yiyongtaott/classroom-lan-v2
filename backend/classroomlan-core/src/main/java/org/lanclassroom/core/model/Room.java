@@ -41,6 +41,16 @@ public class Room {
         return players.stream().filter(p -> p.getId().equals(playerId)).findFirst();
     }
 
+    public Optional<Player> findByIp(String ip) {
+        if (ip == null) return Optional.empty();
+        return players.stream().filter(p -> ip.equals(p.getIp())).findFirst();
+    }
+
+    public Optional<Player> findByName(String name) {
+        if (name == null) return Optional.empty();
+        return players.stream().filter(p -> name.equals(p.getName())).findFirst();
+    }
+
     public String getHostNodeId() { return hostNodeId; }
     public Room setHostNodeId(String hostNodeId) { this.hostNodeId = hostNodeId; return this; }
 

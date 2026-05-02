@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { API_BASE } from '../appConfig'
 
 export const useRoomStore = defineStore('room', () => {
-  // —— 本机身份（访问者视角，由 /api/status 给出）——
+  // —— 本机身份 ——
   const self = ref(JSON.parse(localStorage.getItem('self') || 'null'))
   const isHost = ref(false)
   const nodeId = ref('')
@@ -19,6 +19,9 @@ export const useRoomStore = defineStore('room', () => {
   const lastGameState = ref(null)
   const gameLog = ref([])
   const files = ref([])
+
+  // —— 邀请状态 ——
+  const invitation = ref(null)
 
   const hasJoined = computed(() => !!self.value)
   const reconciling = ref(false)
@@ -47,7 +50,6 @@ export const useRoomStore = defineStore('room', () => {
     return json
   }
 
-  /** 拉取房间快照；若 self 不在房间里（host 重启后等），自动重新加入。 */
   async function refreshSnapshot() {
     const res = await fetch(`${API_BASE}/room`)
     if (!res.ok) throw new Error(`room ${res.status}`)
@@ -55,31 +57,54 @@ export const useRoomStore = defineStore('room', () => {
     players.value = json.players || []
     gameType.value = json.gameType
 
-    // —— Bug 3: reconcile —— 本地 self 还在但 host 已经没记录 → 重新加入
-    if (self.value && !players.value.find(p => p.id === self.value.id) && !reconciling.value) {
-      await ensurePresence()
+    if (self.value) {
+      const updated = players.value.find(p => p.id === self.value.id)
+      if (updated) {
+        // 同步最新头像/名字
+        setSelf({ ...self.value, ...updated })
+      } else if (!reconciling.value) {
+        await ensurePresence()
+      }
     }
     return json
   }
 
+  /**
+   * Bug 4: 启动时优先 GET /api/me（按 IP 同账号）；
+   * 命中就当作"已加入"，覆盖 localStorage。
+   */
+  async function bootstrap() {
+    try {
+      const res = await fetch(`${API_BASE}/me`)
+      if (res.ok) {
+        const me = await res.json()
+        setSelf(me)
+        return me
+      }
+    } catch {}
+    // 没命中 → 用 localStorage 的旧 self 自动重新加入（如果有）
+    if (self.value) {
+      await ensurePresence()
+    }
+    return self.value
+  }
+
   async function ensurePresence() {
-    if (!self.value || reconciling.value) return
+    if (reconciling.value) return
     reconciling.value = true
     try {
       const old = self.value
       const res = await fetch(`${API_BASE}/room/players`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: old.name, hostname: old.hostname })
+        body: JSON.stringify({
+          name: old?.name,
+          hostname: old?.hostname || hostname.value
+        })
       })
-      if (!res.ok) throw new Error(`rejoin HTTP ${res.status}`)
-      const newPlayer = await res.json()
-      setSelf(newPlayer)
-      // 重新拉一次（不会再次触发 ensurePresence，因为 reconciling=true）
-      const snap = await fetch(`${API_BASE}/room`).then(r => r.ok ? r.json() : { players: [] })
-      players.value = snap.players || []
-    } catch (e) {
-      console.warn('[ensurePresence] failed:', e.message)
+      if (!res.ok) return
+      const player = await res.json()
+      setSelf(player)
     } finally {
       reconciling.value = false
     }
@@ -128,6 +153,20 @@ export const useRoomStore = defineStore('room', () => {
     return data.avatar
   }
 
+  async function clearAvatar() {
+    if (!self.value) return
+    const res = await fetch(`${API_BASE}/room/players/${self.value.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ avatar: '' })
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setSelf(updated)
+      await refreshSnapshot()
+    }
+  }
+
   async function leave() {
     if (!self.value) return
     try {
@@ -162,6 +201,18 @@ export const useRoomStore = defineStore('room', () => {
     files.value = list || []
   }
 
+  function setPlayers(list) {
+    players.value = Array.isArray(list) ? list : []
+  }
+
+  function setInvitation(inv) {
+    if (inv && inv.state === 'NONE') {
+      invitation.value = null
+    } else {
+      invitation.value = inv || null
+    }
+  }
+
   // —— 历史拉取 ——
   async function loadChatHistory() {
     try {
@@ -179,10 +230,10 @@ export const useRoomStore = defineStore('room', () => {
 
   return {
     self, isHost, nodeId, hostname, hostNodeId, hostHostname, peerCount, hasJoined,
-    players, messages, gameType, lastGameState, gameLog, files,
-    setSelf, clearSelf, refreshStatus, refreshSnapshot, ensurePresence,
-    joinAs, updateName, uploadAvatar, leave,
-    appendMessage, setMessages, setGameState, setGameLog, setFiles,
+    players, messages, gameType, lastGameState, gameLog, files, invitation,
+    setSelf, clearSelf, refreshStatus, refreshSnapshot, bootstrap, ensurePresence,
+    joinAs, updateName, uploadAvatar, clearAvatar, leave,
+    appendMessage, setMessages, setGameState, setGameLog, setFiles, setPlayers, setInvitation,
     loadChatHistory, loadGameHistory
   }
 })

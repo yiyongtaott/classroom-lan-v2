@@ -20,8 +20,11 @@ import java.nio.file.Path;
 import java.util.Map;
 
 /**
- * 头像上传 / 读取 REST 接口。
- * 文件存于 Host 本地 ./avatars/ 目录（Bug 7 要求"项目同目录"）。
+ * 头像 REST 接口。
+ *
+ * 上传：POST /api/avatars/{playerId}    -- 文件按"原名同名覆盖"存储；自动绑到 player.name
+ * 读取：GET  /api/avatars/file/{name}   -- 直接按文件名读取
+ * 用户名查询：GET /api/avatars/by-name?name=Bob
  */
 @RestController
 @RequestMapping("/api/avatars")
@@ -39,19 +42,26 @@ public class AvatarController {
     public ResponseEntity<Map<String, String>> upload(
             @PathVariable("playerId") String playerId,
             @RequestParam("file") MultipartFile file) throws IOException {
-        String url = storage.store(playerId, file);
-        // 回写到 Player 对象
         Player p = room.findById(playerId).orElse(null);
-        if (p != null) {
-            p.setAvatar(url);
+        if (p == null) {
+            return ResponseEntity.notFound().build();
         }
+        String url = storage.storeFor(p.getName(), file);
+        p.setAvatar(url);
         return ResponseEntity.ok(Map.of("avatar", url));
     }
 
-    @GetMapping("/{playerId}")
-    public ResponseEntity<Resource> get(@PathVariable("playerId") String playerId) {
-        return storage.findByPlayerId(playerId)
+    @GetMapping("/file/{filename:.+}")
+    public ResponseEntity<Resource> getByFilename(@PathVariable("filename") String filename) {
+        return storage.findByFilename(filename)
                 .map(this::toImageResponse)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/by-name")
+    public ResponseEntity<Map<String, String>> getByName(@RequestParam("name") String name) {
+        return storage.avatarUrlOf(name)
+                .map(url -> ResponseEntity.ok(Map.of("avatar", url)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
@@ -68,6 +78,7 @@ public class AvatarController {
         if (n.endsWith(".jpg") || n.endsWith(".jpeg")) return MediaType.IMAGE_JPEG;
         if (n.endsWith(".gif")) return MediaType.IMAGE_GIF;
         if (n.endsWith(".webp")) return MediaType.parseMediaType("image/webp");
+        if (n.endsWith(".bmp")) return MediaType.parseMediaType("image/bmp");
         return MediaType.APPLICATION_OCTET_STREAM;
     }
 }

@@ -3,16 +3,20 @@
     <header>
       <h2>游戏</h2>
       <div class="active" v-if="active">
-        当前游戏：<strong>{{ active }}</strong>
+        当前游戏：<strong>{{ gameTitle(active) }}</strong>
         <button class="btn small" @click="stopGame">停止</button>
+      </div>
+      <div class="active" v-else-if="invitation && invitation.state === 'PENDING'">
+        正在等待玩家响应：<strong>{{ gameTitle(invitation.gameType) }}</strong>
       </div>
       <div class="active" v-else>当前空闲</div>
     </header>
 
     <div v-if="!active" class="lobby">
-      <h3>选择游戏</h3>
+      <h3>选择游戏发起邀请</h3>
+      <p class="hint">点击后将向所有在线玩家发出邀请，全员接受才会进入游戏；任一玩家强制进入会立即开始。</p>
       <div class="games">
-        <button class="game-card" @click="startGame('NUMBER_GUESS')">
+        <button class="game-card" @click="startGame('NUMBER_GUESS')" :disabled="!stomp.connected.value">
           <div class="title">🎯 猜数字</div>
           <div class="desc">范围 1–100，最快猜中获胜</div>
         </button>
@@ -50,7 +54,7 @@
         <button class="btn primary" :disabled="winner !== '' || !Number.isInteger(value)">提交</button>
       </form>
 
-      <div v-if="winner" class="winner">🏆 {{ winner }} 猜中！答案揭晓后请点击"停止"开始下一局。</div>
+      <div v-if="winner" class="winner">🏆 {{ winner }} 猜中！点击"停止"开始下一局。</div>
 
       <div class="log-box">
         <div class="aside-title">动作记录</div>
@@ -82,6 +86,7 @@ const rounds = ref(0)
 const feedback = ref('')
 
 const active = computed(() => roomStore.gameType)
+const invitation = computed(() => roomStore.invitation)
 const historyEntries = computed(() =>
   (roomStore.gameLog || []).filter(x => x && x.gameType === 'NUMBER_GUESS')
 )
@@ -93,10 +98,14 @@ function stageLabel(stage) {
   return map[stage] || stage || '—'
 }
 
+function gameTitle(t) {
+  const map = { NUMBER_GUESS: '猜数字', DRAW: '你画我猜', QUIZ: '抢答' }
+  return map[t] || t
+}
+
 function tsLabel(ts) {
   if (!ts) return ''
-  const d = new Date(ts)
-  return d.toLocaleString('zh-CN', { hour12: false })
+  return new Date(ts).toLocaleString('zh-CN', { hour12: false })
 }
 
 function startGame(type) {
@@ -104,7 +113,8 @@ function startGame(type) {
   winner.value = ''
   feedback.value = ''
   rounds.value = 0
-  stomp.publish(APP.GAME_START, { type })
+  // 走邀请流程：服务端会 broadcast 到 /topic/game.invitation，全局对话框接管
+  stomp.publish(APP.GAME_START, { type, playerId: roomStore.self?.id })
 }
 
 function stopGame() {
@@ -166,26 +176,27 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .game { max-width: 900px; margin: 0 auto; }
-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; flex-wrap: wrap; gap: .5rem; }
 header h2 { margin: 0; color: #16a34a; }
-.active { color: #6b7280; }
+.active { color: #6b7280; font-size: .9rem; }
 .active strong { color: #1f2937; margin-right: .5rem; }
 .lobby h3 { color: #374151; }
 .lobby h3 small { color: #9ca3af; font-weight: normal; font-size: .85rem; }
+.hint { color: #6b7280; font-size: .9rem; margin-bottom: 1rem; }
 .games { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
-.game-card { background: white; border: 2px solid #e5e7eb; border-radius: 8px; padding: 1.5rem; text-align: left; cursor: pointer; transition: all .15s; }
-.game-card:hover:not(.disabled) { border-color: #16a34a; transform: translateY(-2px); }
-.game-card.disabled { opacity: .5; cursor: not-allowed; }
-.game-card .title { font-weight: 700; font-size: 1.1rem; margin-bottom: .35rem; }
+.game-card { background: white; border: 2px solid #e5e7eb; border-radius: 8px; padding: 1.25rem; text-align: left; cursor: pointer; transition: all .15s; }
+.game-card:hover:not(.disabled):not(:disabled) { border-color: #16a34a; transform: translateY(-2px); }
+.game-card.disabled, .game-card:disabled { opacity: .5; cursor: not-allowed; }
+.game-card .title { font-weight: 700; font-size: 1.05rem; margin-bottom: .35rem; }
 .game-card .desc { color: #6b7280; font-size: .85rem; }
 
 .history { margin-top: 2rem; }
-.board { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.5rem; }
+.board { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem; }
 .hint { display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: #f9fafb; border-radius: 6px; margin-bottom: 1rem; }
 .rounds { color: #6b7280; font-size: .9rem; }
 .input { display: flex; gap: .5rem; }
 .input input { flex: 1; padding: .55rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 1.1rem; }
-.btn { padding: .55rem 1.1rem; border-radius: 6px; border: 1px solid #d1d5db; background: white; color: #1f2937; }
+.btn { padding: .5rem 1rem; border-radius: 6px; border: 1px solid #d1d5db; background: white; color: #1f2937; }
 .btn.small { padding: .25rem .6rem; font-size: .8rem; }
 .btn.primary { background: #16a34a; color: white; border-color: #16a34a; }
 .btn.primary:disabled { background: #9ca3af; border-color: #9ca3af; cursor: not-allowed; }
