@@ -12,6 +12,16 @@
         <span>等待 {{ counts.pending }}</span>
         <span class="timer"> · ⏱ {{ timeLeft }}s</span>
       </p>
+
+      <!-- 实时投票头像列表 -->
+      <ul class="vote-list">
+        <li v-for="p in onlinePlayers" :key="p.id" :class="responseFor(p.id)">
+          <Avatar :player="p" :size="22" />
+          <span class="name">{{ p.name }}</span>
+          <span class="status">{{ responseLabel(responseFor(p.id)) }}</span>
+        </li>
+      </ul>
+
       <div class="actions">
         <button class="btn primary" @click="respond('ACCEPT')" :disabled="myResponse === 'ACCEPT'">
           {{ myResponse === 'ACCEPT' ? '已接受' : '接受' }}
@@ -34,32 +44,44 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, onBeforeUnmount, onMounted } from 'vue'
 import { useRoomStore } from '../stores/room'
+import { useUserListStore } from '../stores/userList'
 import { useStomp } from '../composables/useStomp'
 import { useToastStore } from '../stores/toast'
 import { useRouter } from 'vue-router'
-import { TOPIC, APP } from '../appConfig'
+import { APP } from '../appConfig'
+import Avatar from './Avatar.vue'
 
 const roomStore = useRoomStore()
+const userList = useUserListStore()
 const stomp = useStomp()
 const toastStore = useToastStore()
 const router = useRouter()
 
 const minimized = ref(false)
 const now = ref(Date.now())
-let unsub = null
 let tickTimer = null
 
 const invitation = computed(() => roomStore.invitation)
+const onlinePlayers = computed(() =>
+  userList.users.filter(u => (u.status || 'ONLINE') === 'ONLINE' || u.wsAlive)
+)
+
+function responseFor(playerId) {
+  return invitation.value?.responses?.[playerId] || 'PENDING'
+}
+
+function responseLabel(r) {
+  const map = { ACCEPT: '已接受', DECLINE: '已拒绝', FORCE: '强制', PENDING: '等待中' }
+  return map[r] || '等待中'
+}
 
 const counts = computed(() => {
   const inv = invitation.value
-  const players = roomStore.players
   if (!inv) return { accept: 0, decline: 0, pending: 0, total: 0 }
   let accept = 0, decline = 0, pending = 0
-  for (const p of players) {
-    if (p.status !== 'ONLINE') continue
+  for (const p of onlinePlayers.value) {
     const r = inv.responses ? inv.responses[p.id] : null
     if (r === 'ACCEPT' || r === 'FORCE') accept++
     else if (r === 'DECLINE') decline++
@@ -82,7 +104,7 @@ const myResponse = computed(() =>
 const initiatorName = computed(() => {
   const inv = invitation.value
   if (!inv) return ''
-  const p = roomStore.players.find(x => x.id === inv.initiatorPlayerId)
+  const p = userList.find(inv.initiatorPlayerId)
   return p ? p.name : '某玩家'
 })
 
@@ -93,6 +115,10 @@ const gameTitle = computed(() => {
 
 function respond(action) {
   if (!roomStore.self) return
+  // 本地立即反映（不等服务端回包，无延迟）
+  if (invitation.value && invitation.value.responses) {
+    invitation.value.responses[roomStore.self.id] = action
+  }
   stomp.publish(APP.GAME_INVITATION_RESPOND, {
     playerId: roomStore.self.id,
     response: action
@@ -103,7 +129,9 @@ watch(() => invitation.value?.state, (state, oldState) => {
   if (state === 'ACTIVE') {
     minimized.value = false
     toastStore.push({ type: 'ok', icon: '🎮', title: '游戏开始', body: gameTitle.value })
-    router.push('/game')
+    if (roomStore.isParticipantInActiveGame || !roomStore.gameStartInfo) {
+      router.push('/game')
+    }
   } else if (state === 'CANCELLED' && oldState === 'PENDING') {
     minimized.value = false
     toastStore.push({ type: 'warn', icon: '🚫', title: '邀请已取消', body: gameTitle.value })
@@ -113,15 +141,10 @@ watch(() => invitation.value?.state, (state, oldState) => {
 })
 
 onMounted(() => {
-  unsub = stomp.subscribe(TOPIC.GAME_INVITATION, (inv) => {
-    roomStore.setInvitation(inv)
-  })
-  // 时钟驱动倒计时显示
-  tickTimer = setInterval(() => { now.value = Date.now() }, 1000)
+  tickTimer = setInterval(() => { now.value = Date.now() }, 500)
 })
 
 onBeforeUnmount(() => {
-  if (unsub) unsub()
   if (tickTimer) clearInterval(tickTimer)
 })
 </script>
@@ -137,7 +160,7 @@ onBeforeUnmount(() => {
   background: white;
   border-radius: 10px;
   padding: 1.5rem 1.75rem;
-  max-width: 420px; width: 90%;
+  max-width: 460px; width: 90%;
   box-shadow: 0 20px 60px rgba(0,0,0,.25);
   position: relative;
 }
@@ -145,6 +168,23 @@ onBeforeUnmount(() => {
 .who { color: #1f2937; }
 .status-line { color: #6b7280; font-size: .85rem; }
 .timer { color: #f59e0b; }
+
+.vote-list {
+  list-style: none; padding: 0; margin: .85rem 0;
+  border: 1px solid #f3f4f6; border-radius: 6px;
+  max-height: 200px; overflow-y: auto;
+}
+.vote-list li {
+  display: flex; align-items: center; gap: .55rem;
+  padding: .35rem .7rem; border-bottom: 1px solid #f9fafb;
+}
+.vote-list li:last-child { border-bottom: none; }
+.vote-list .name { flex: 1; }
+.vote-list .status { font-size: .75rem; padding: .12rem .5rem; border-radius: 999px; }
+.vote-list li.ACCEPT .status, .vote-list li.FORCE .status { background: #dcfce7; color: #15803d; }
+.vote-list li.DECLINE .status { background: #fee2e2; color: #991b1b; }
+.vote-list li.PENDING .status { background: #f3f4f6; color: #6b7280; }
+
 .actions { display: flex; gap: .5rem; margin-top: 1rem; }
 .btn { flex: 1; padding: .55rem; border-radius: 6px; border: 1px solid #d1d5db; background: white; cursor: pointer; }
 .btn.primary { background: #16a34a; color: white; border-color: #16a34a; }

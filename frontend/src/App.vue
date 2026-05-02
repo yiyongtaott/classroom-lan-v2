@@ -10,12 +10,16 @@
       </nav>
       <div class="status-pill">
         <span :class="['dot', stomp.connected.value ? 'on' : 'off']" />
-        {{ stomp.connected.value ? '在线' : '离线' }}
-        · {{ roomStore.isHost ? 'HOST' : 'CUSTOMER' }}
-        · {{ roomStore.nodeId || '—' }}
-        <span v-if="roomStore.hostname"> ({{ roomStore.hostname }})</span>
+        {{ stomp.connected.value ? '在线' : (reconnectMsg || '离线') }}
+        · {{ appStore.isHost ? 'HOST' : 'CUSTOMER' }}
+        · {{ appStore.selfNodeId || '—' }}
+        <span v-if="appStore.selfHostname"> ({{ appStore.selfHostname }})</span>
       </div>
     </header>
+
+    <div v-if="!stomp.connected.value && appStore.initialized" class="reconnect-banner">
+      与 Host 的连接已断开，正在重新连接（第 {{ stomp.reconnectAttempt.value }} 次尝试）…
+    </div>
 
     <div :class="['app-body', { joined: roomStore.hasJoined }]">
       <ChatPanel v-if="roomStore.hasJoined" class="left-col" />
@@ -27,95 +31,46 @@
 
     <ToastHost />
     <InvitationDialog />
+    <PrivateChatDock v-if="roomStore.hasJoined" />
+    <UserDetailPanel />
   </div>
 </template>
 
 <script setup>
-import { onMounted, onBeforeUnmount, watch } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useRoomStore } from './stores/room'
-import { useToastStore } from './stores/toast'
+import { useAppStore } from './stores/app'
 import { useStomp } from './composables/useStomp'
-import { TOPIC, APP } from './appConfig'
+import { useWebSocket } from './composables/useWebSocket'
+import { APP } from './appConfig'
 import { useRouter } from 'vue-router'
 
 import ChatPanel from './components/ChatPanel.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import ToastHost from './components/ToastHost.vue'
 import InvitationDialog from './components/InvitationDialog.vue'
+import PrivateChatDock from './components/PrivateChatDock.vue'
+import UserDetailPanel from './components/UserDetailPanel.vue'
 
 const roomStore = useRoomStore()
-const toastStore = useToastStore()
+const appStore = useAppStore()
 const stomp = useStomp()
+const ws = useWebSocket()
 const router = useRouter()
 
-let pollTimer = null
-let unsubChat = null
-let unsubPlayers = null
-let unsubFile = null
-
-// Bug 11: 非聊天页有新消息 / 非文件页有上传 → toast
-function isOnPath(prefix) {
-  return router.currentRoute.value.path.startsWith(prefix)
-}
+const reconnectMsg = computed(() =>
+  stomp.reconnectAttempt.value > 0 ? `重连中…` : ''
+)
 
 onMounted(async () => {
-  stomp.connect()
+  ws.init()
 
-  try {
-    await roomStore.refreshStatus()
-  } catch {}
-
-  // 启动时尝试自动签到（同 IP 命中 → 不需要再 /join）
-  await roomStore.bootstrap()
-  if (roomStore.hasJoined) {
-    await roomStore.refreshSnapshot()
-    await roomStore.loadChatHistory()
-    await roomStore.loadGameHistory()
-  }
-
-  // 周期轮询
-  pollTimer = setInterval(async () => {
-    try {
-      await roomStore.refreshStatus()
-      if (roomStore.hasJoined) await roomStore.refreshSnapshot()
-    } catch {}
-  }, 4000)
-
-  // 玩家列表实时推送（Bug 7：连接事件 / 清理触发）
-  unsubPlayers = stomp.subscribe(TOPIC.PLAYERS, (list) => {
-    roomStore.setPlayers(list)
-    if (roomStore.self) {
-      const updated = list.find(p => p.id === roomStore.self.id)
-      if (updated) roomStore.setSelf({ ...roomStore.self, ...updated })
-    }
-  })
-
-  // Bug 11：非 chat 路由下有新消息 → toast 提醒
-  unsubChat = stomp.subscribe(TOPIC.CHAT, (msg) => {
-    if (msg && msg.senderId !== roomStore.self?.id) {
-      toastStore.push({
-        type: 'info', icon: '💬', durationMs: 2200,
-        title: msg.sender || '新消息',
-        body: msg.content
-      })
-    }
-  })
-
-  // Bug 11：非文件页有上传 → toast
-  unsubFile = stomp.subscribe(TOPIC.FILE_PROGRESS, (ev) => {
-    if (!ev) return
-    if (isOnPath('/files')) return
-    if (ev.stage === 'UPLOADED') {
-      toastStore.push({
-        type: 'ok', icon: '📁', durationMs: 2500,
-        title: '新文件',
-        body: ev.name || ''
-      })
-    }
-  })
+  // 启动时尝试同 IP 复用账号
+  await roomStore.bootstrap(appStore.selfHostname)
+  // 一旦 STOMP 连上 + 已加入 → 发 player.online 帧；
+  // 同时 useWebSocket.onConnect 也会触发，无需重复
 })
 
-// 一旦 STOMP 连上 + 已加入 → 发 player.online 帧绑定 session（Bug 7）
 watch(
   () => [stomp.connected.value, roomStore.self?.id],
   ([connected, pid]) => {
@@ -126,11 +81,15 @@ watch(
   { immediate: true }
 )
 
-onBeforeUnmount(() => {
-  if (pollTimer) clearInterval(pollTimer)
-  if (unsubChat) unsubChat()
-  if (unsubPlayers) unsubPlayers()
-  if (unsubFile) unsubFile()
+// 游戏开始通知 → 仅参与者跳转到 /game
+watch(() => roomStore.gameStartInfo, (info) => {
+  if (!info) return
+  const myId = roomStore.self?.id
+  if (info.players && info.players.includes(myId)) {
+    if (router.currentRoute.value.path !== '/game') {
+      router.push('/game')
+    }
+  }
 })
 </script>
 
@@ -159,6 +118,11 @@ body { margin: 0; font-family: 'Segoe UI', Tahoma, sans-serif; background: #f5f7
 .dot { width: 8px; height: 8px; border-radius: 50%; }
 .dot.on { background: #22c55e; box-shadow: 0 0 0 2px rgba(34,197,94,.2); }
 .dot.off { background: #ef4444; }
+
+.reconnect-banner {
+  padding: .55rem 1rem; background: #fef3c7; color: #92400e;
+  border-bottom: 1px solid #fde68a; font-size: .85rem; text-align: center;
+}
 
 .app-body {
   flex: 1;

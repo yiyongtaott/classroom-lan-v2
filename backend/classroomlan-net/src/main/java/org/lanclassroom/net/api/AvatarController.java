@@ -3,6 +3,7 @@ package org.lanclassroom.net.api;
 import org.lanclassroom.core.model.Player;
 import org.lanclassroom.core.model.Room;
 import org.lanclassroom.net.service.AvatarStorageService;
+import org.lanclassroom.net.service.StatusBroadcastService;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
@@ -22,7 +23,8 @@ import java.util.Map;
 /**
  * 头像 REST 接口。
  *
- * 上传：POST /api/avatars/{playerId}    -- 文件按"原名同名覆盖"存储；自动绑到 player.name
+ * 上传：POST /api/avatars/{playerId}    -- 文件按"原名同名覆盖"存储；自动绑到 player.name；
+ *                                           上传后广播 /topic/user.update（BUG-02）。
  * 读取：GET  /api/avatars/file/{name}   -- 直接按文件名读取
  * 用户名查询：GET /api/avatars/by-name?name=Bob
  */
@@ -32,10 +34,13 @@ public class AvatarController {
 
     private final AvatarStorageService storage;
     private final Room room;
+    private final StatusBroadcastService statusBroadcast;
 
-    public AvatarController(AvatarStorageService storage, Room room) {
+    public AvatarController(AvatarStorageService storage, Room room,
+                            StatusBroadcastService statusBroadcast) {
         this.storage = storage;
         this.room = room;
+        this.statusBroadcast = statusBroadcast;
     }
 
     @PostMapping("/{playerId}")
@@ -48,6 +53,8 @@ public class AvatarController {
         }
         String url = storage.storeFor(p.getName(), file);
         p.setAvatar(url);
+        statusBroadcast.broadcastUserUpdate(p);
+        statusBroadcast.broadcastRoom();
         return ResponseEntity.ok(Map.of("avatar", url));
     }
 

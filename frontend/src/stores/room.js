@@ -2,33 +2,48 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { API_BASE } from '../appConfig'
 
+/**
+ * 房间业务状态：自身玩家信息、聊天 / 游戏 / 邀请状态、画板笔画。
+ *
+ * 不再轮询 /api/status 或 /api/room；状态由 useWebSocket 推送给 store：
+ *   applyRoom        ← /topic/room
+ *   appendMessage    ← /topic/chat
+ *   setGameState     ← /topic/game.state
+ *   setInvitation    ← /topic/game.invitation
+ *   setInvitationState ← /topic/game.invitation.state
+ *   setGameStartInfo ← /topic/game.start
+ *   appendDrawStroke ← /topic/game.draw.canvas
+ */
 export const useRoomStore = defineStore('room', () => {
-  // —— 本机身份 ——
   const self = ref(JSON.parse(localStorage.getItem('self') || 'null'))
-  const isHost = ref(false)
-  const nodeId = ref('')
-  const hostname = ref('')
-  const hostNodeId = ref('')
-  const hostHostname = ref('')
-  const peerCount = ref(0)
-
-  // —— 房间状态 ——
   const players = ref([])
   const messages = ref([])
   const gameType = ref(null)
   const lastGameState = ref(null)
   const gameLog = ref([])
-  const files = ref([])
-
-  // —— 邀请状态 ——
   const invitation = ref(null)
+  const invitationState = ref(null)
+  const gameStartInfo = ref(null)
+  const drawStrokes = ref([])
+  const drawPrivate = ref(null)
+  const reconciling = ref(false)
 
   const hasJoined = computed(() => !!self.value)
-  const reconciling = ref(false)
+  const isParticipantInActiveGame = computed(() => {
+    if (!gameStartInfo.value) return false
+    const list = gameStartInfo.value.players || []
+    return list.includes(self.value?.id)
+  })
 
   function setSelf(player) {
     self.value = player
     localStorage.setItem('self', JSON.stringify(player))
+  }
+
+  function patchSelf(patch) {
+    if (!self.value) return
+    Object.assign(self.value, patch)
+    localStorage.setItem('self', JSON.stringify(self.value))
   }
 
   function clearSelf() {
@@ -36,44 +51,24 @@ export const useRoomStore = defineStore('room', () => {
     localStorage.removeItem('self')
   }
 
-  async function refreshStatus() {
-    const res = await fetch(`${API_BASE}/status`)
-    if (!res.ok) throw new Error(`status ${res.status}`)
-    const json = await res.json()
-    isHost.value = json.host
-    nodeId.value = json.nodeId
-    hostname.value = json.hostname
-    hostNodeId.value = json.hostNodeId
-    hostHostname.value = json.hostHostname
-    peerCount.value = json.peerCount
-    gameType.value = json.gameType
-    return json
-  }
-
-  async function refreshSnapshot() {
-    const res = await fetch(`${API_BASE}/room`)
-    if (!res.ok) throw new Error(`room ${res.status}`)
-    const json = await res.json()
-    players.value = json.players || []
-    gameType.value = json.gameType
-
+  /** room 快照应用（来自 /topic/room 或 /user/queue/init.room）。 */
+  function applyRoom(snap) {
+    if (!snap) return
+    if (Array.isArray(snap.players)) players.value = snap.players
+    if ('gameType' in snap) gameType.value = snap.gameType
     if (self.value) {
-      const updated = players.value.find(p => p.id === self.value.id)
-      if (updated) {
-        // 同步最新头像/名字
-        setSelf({ ...self.value, ...updated })
+      const me = players.value.find(p => p.id === self.value.id)
+      if (me) {
+        Object.assign(self.value, me)
+        localStorage.setItem('self', JSON.stringify(self.value))
       } else if (!reconciling.value) {
-        await ensurePresence()
+        ensurePresence()
       }
     }
-    return json
   }
 
-  /**
-   * Bug 4: 启动时优先 GET /api/me（按 IP 同账号）；
-   * 命中就当作"已加入"，覆盖 localStorage。
-   */
-  async function bootstrap() {
+  /** 启动时优先 GET /api/me（按 IP 同账号）。 */
+  async function bootstrap(hostnameFallback) {
     try {
       const res = await fetch(`${API_BASE}/me`)
       if (res.ok) {
@@ -82,14 +77,13 @@ export const useRoomStore = defineStore('room', () => {
         return me
       }
     } catch {}
-    // 没命中 → 用 localStorage 的旧 self 自动重新加入（如果有）
     if (self.value) {
-      await ensurePresence()
+      await ensurePresence(hostnameFallback)
     }
     return self.value
   }
 
-  async function ensurePresence() {
+  async function ensurePresence(hostnameFallback) {
     if (reconciling.value) return
     reconciling.value = true
     try {
@@ -97,10 +91,7 @@ export const useRoomStore = defineStore('room', () => {
       const res = await fetch(`${API_BASE}/room/players`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: old?.name,
-          hostname: old?.hostname || hostname.value
-        })
+        body: JSON.stringify({ name: old?.name, hostname: old?.hostname || hostnameFallback })
       })
       if (!res.ok) return
       const player = await res.json()
@@ -110,16 +101,15 @@ export const useRoomStore = defineStore('room', () => {
     }
   }
 
-  async function joinAs({ name, hostname: hn }) {
+  async function joinAs({ name, hostname }) {
     const res = await fetch(`${API_BASE}/room/players`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, hostname: hn })
+      body: JSON.stringify({ name, hostname })
     })
     if (!res.ok) throw new Error(`join failed: HTTP ${res.status}`)
     const player = await res.json()
     setSelf(player)
-    await refreshSnapshot()
     return player
   }
 
@@ -133,7 +123,6 @@ export const useRoomStore = defineStore('room', () => {
     if (!res.ok) throw new Error(`update HTTP ${res.status}`)
     const updated = await res.json()
     setSelf(updated)
-    await refreshSnapshot()
     return updated
   }
 
@@ -141,15 +130,11 @@ export const useRoomStore = defineStore('room', () => {
     if (!self.value) throw new Error('not joined')
     const fd = new FormData()
     fd.append('file', file)
-    const res = await fetch(`${API_BASE}/avatars/${self.value.id}`, {
-      method: 'POST',
-      body: fd
-    })
+    const res = await fetch(`${API_BASE}/avatars/${self.value.id}`, { method: 'POST', body: fd })
     if (!res.ok) throw new Error(`avatar upload failed: HTTP ${res.status}`)
     const data = await res.json()
     self.value.avatar = data.avatar
     setSelf(self.value)
-    await refreshSnapshot()
     return data.avatar
   }
 
@@ -163,15 +148,12 @@ export const useRoomStore = defineStore('room', () => {
     if (res.ok) {
       const updated = await res.json()
       setSelf(updated)
-      await refreshSnapshot()
     }
   }
 
   async function leave() {
     if (!self.value) return
-    try {
-      await fetch(`${API_BASE}/room/players/${self.value.id}`, { method: 'DELETE' })
-    } catch {}
+    try { await fetch(`${API_BASE}/room/players/${self.value.id}`, { method: 'DELETE' }) } catch {}
     clearSelf()
     players.value = []
     messages.value = []
@@ -190,6 +172,13 @@ export const useRoomStore = defineStore('room', () => {
     lastGameState.value = state
     gameLog.value.push(state)
     if (gameLog.value.length > 200) gameLog.value.shift()
+    if (state && state.gameType) gameType.value = state.gameType
+    if (state && (state.stage === 'STOPPED' || state.stage === 'GAME_OVER')) {
+      // 游戏结束 → 清空画板缓存
+      drawStrokes.value = []
+      drawPrivate.value = null
+      gameStartInfo.value = null
+    }
   }
 
   function setGameLog(list) {
@@ -197,23 +186,46 @@ export const useRoomStore = defineStore('room', () => {
     lastGameState.value = gameLog.value[gameLog.value.length - 1] || null
   }
 
-  function setFiles(list) {
-    files.value = list || []
-  }
-
-  function setPlayers(list) {
-    players.value = Array.isArray(list) ? list : []
-  }
-
   function setInvitation(inv) {
-    if (inv && inv.state === 'NONE') {
+    if (inv && (inv.state === 'NONE' || !inv.state)) {
       invitation.value = null
     } else {
       invitation.value = inv || null
     }
   }
 
-  // —— 历史拉取 ——
+  function setInvitationState(state) {
+    invitationState.value = state
+    if (state && state.responses && invitation.value) {
+      invitation.value.responses = state.responses
+    }
+  }
+
+  function setGameStartInfo(msg) {
+    gameStartInfo.value = msg
+  }
+
+  function appendDrawStroke(stroke) {
+    if (!stroke) return
+    drawStrokes.value.push(stroke)
+    if (drawStrokes.value.length > 5000) {
+      drawStrokes.value = drawStrokes.value.slice(-3000)
+    }
+  }
+
+  function clearDrawStrokes() {
+    drawStrokes.value = []
+  }
+
+  function applyDrawPrivate(msg) {
+    drawPrivate.value = msg
+  }
+
+  function notifyFileChange(_ev) {
+    // 由 FileView 自行重新 fetch 列表 - 这里只是占位让订阅链路完整
+  }
+
+  // 历史拉取（HTTP 兜底）
   async function loadChatHistory() {
     try {
       const res = await fetch(`${API_BASE}/chat/history`)
@@ -229,11 +241,14 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   return {
-    self, isHost, nodeId, hostname, hostNodeId, hostHostname, peerCount, hasJoined,
-    players, messages, gameType, lastGameState, gameLog, files, invitation,
-    setSelf, clearSelf, refreshStatus, refreshSnapshot, bootstrap, ensurePresence,
+    self, players, messages, gameType, lastGameState, gameLog,
+    invitation, invitationState, gameStartInfo,
+    drawStrokes, drawPrivate, hasJoined, isParticipantInActiveGame,
+    setSelf, patchSelf, clearSelf, applyRoom, bootstrap, ensurePresence,
     joinAs, updateName, uploadAvatar, clearAvatar, leave,
-    appendMessage, setMessages, setGameState, setGameLog, setFiles, setPlayers, setInvitation,
+    appendMessage, setMessages,
+    setGameState, setGameLog, setInvitation, setInvitationState, setGameStartInfo,
+    appendDrawStroke, clearDrawStrokes, applyDrawPrivate, notifyFileChange,
     loadChatHistory, loadGameHistory
   }
 })

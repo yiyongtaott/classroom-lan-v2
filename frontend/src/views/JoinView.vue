@@ -11,8 +11,8 @@
         </div>
         <input ref="avatarInput" type="file" accept="image/*" style="display:none" @change="onAvatarPick" />
         <div class="me-info">
-          <div><strong>{{ roomStore.hostname || '本机' }}</strong></div>
-          <div class="muted">{{ roomStore.nodeId || '—' }}</div>
+          <div><strong>{{ appStore.selfHostname || '本机' }}</strong></div>
+          <div class="muted">{{ appStore.selfNodeId || '—' }}</div>
         </div>
       </div>
 
@@ -38,10 +38,12 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useRoomStore } from '../stores/room'
+import { useAppStore } from '../stores/app'
 import { useToastStore } from '../stores/toast'
 
 const router = useRouter()
 const roomStore = useRoomStore()
+const appStore = useAppStore()
 const toastStore = useToastStore()
 
 const name = ref('')
@@ -54,17 +56,15 @@ const avatarInput = ref(null)
 const canSubmit = computed(() => name.value.length > 0)
 
 function defaultName() {
-  return localStorage.getItem('lastName') || roomStore.hostname || roomStore.nodeId || ''
+  return localStorage.getItem('lastName') || appStore.selfHostname || appStore.selfNodeId || ''
 }
 
 onMounted(async () => {
-  try { await roomStore.refreshStatus() } catch {}
   if (!name.value) name.value = defaultName()
-  // 已经是已加入用户 → 直接跳走
   if (roomStore.hasJoined) router.replace('/')
 })
 
-watch(() => roomStore.hostname, () => {
+watch(() => appStore.selfHostname, () => {
   if (!name.value) name.value = defaultName()
 })
 
@@ -85,7 +85,7 @@ async function submit() {
   loading.value = true
   error.value = ''
   try {
-    await roomStore.joinAs({ name: name.value, hostname: roomStore.hostname })
+    await roomStore.joinAs({ name: name.value, hostname: appStore.selfHostname })
     if (avatarFile.value) {
       try {
         await roomStore.uploadAvatar(avatarFile.value)

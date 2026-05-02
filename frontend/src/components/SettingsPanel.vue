@@ -34,12 +34,12 @@
 
       <dl class="meta">
         <dt>玩家 ID</dt><dd>{{ shortId(roomStore.self?.id) }}</dd>
-        <dt>本机 IP</dt><dd>{{ roomStore.self?.ip || roomStore.nodeId || '—' }}</dd>
-        <dt>系统名</dt><dd>{{ roomStore.self?.hostname || roomStore.hostname || '—' }}</dd>
+        <dt>本机 IP</dt><dd>{{ roomStore.self?.ip || appStore.selfNodeId || '—' }}</dd>
+        <dt>系统名</dt><dd>{{ roomStore.self?.hostname || appStore.selfHostname || '—' }}</dd>
         <dt>角色</dt>
         <dd>
-          <span :class="['role', roomStore.isHost ? 'host' : 'client']">
-            {{ roomStore.isHost ? 'HOST' : 'CUSTOMER' }}
+          <span :class="['role', appStore.isHost ? 'host' : 'client']">
+            {{ appStore.isHost ? 'HOST' : 'CUSTOMER' }}
           </span>
         </dd>
       </dl>
@@ -53,10 +53,12 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useRoomStore } from '../stores/room'
+import { useAppStore } from '../stores/app'
 import { useToastStore } from '../stores/toast'
 
 const router = useRouter()
 const roomStore = useRoomStore()
+const appStore = useAppStore()
 const toastStore = useToastStore()
 
 const name = ref('')

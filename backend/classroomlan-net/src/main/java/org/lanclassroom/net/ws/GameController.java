@@ -7,17 +7,25 @@ import org.lanclassroom.net.service.GameEngine;
 import org.lanclassroom.net.service.GameInvitationService;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.stereotype.Controller;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
  * 游戏 STOMP 控制器。
  *
- * /app/game.start              {type, playerId}    发起邀请，等待全员响应
- * /app/game.invitation.respond {playerId, response} 接受 / 拒绝 / 强制进入
- * /app/game.action             {playerId, ...}     游戏动作
- * /app/game.stop                                    停止当前游戏
+ * /app/game.start                 {type, playerId}     发起邀请
+ * /app/game.invitation.respond    {playerId, response} 接受 / 拒绝 / 强制进入
+ * /app/game.action                {playerId, ...}      游戏动作（猜数字 / 你画我猜共用）
+ * /app/game.stop                                       停止当前游戏
+ *
+ * 你画我猜专用便捷入口（也可以走 /app/game.action 携带 action 字段）：
+ * /app/game.draw.select           {index}
+ * /app/game.draw.stroke           {points, color, lineWidth, tool}
+ * /app/game.draw.guess            {guess}
+ * /app/game.draw.clear
  */
 @Controller
 public class GameController {
@@ -25,11 +33,14 @@ public class GameController {
     private final GameEngine engine;
     private final GameInvitationService invitations;
     private final Room room;
+    private final ClientSessionRegistry sessions;
 
-    public GameController(GameEngine engine, GameInvitationService invitations, Room room) {
+    public GameController(GameEngine engine, GameInvitationService invitations, Room room,
+                          ClientSessionRegistry sessions) {
         this.engine = engine;
         this.invitations = invitations;
         this.room = room;
+        this.sessions = sessions;
     }
 
     @MessageMapping("/game.start")
@@ -45,9 +56,8 @@ public class GameController {
     }
 
     @MessageMapping("/game.action")
-    public void onAction(@Payload Map<String, Object> payload) {
-        String playerId = String.valueOf(payload.getOrDefault("playerId", ""));
-        Player player = room.findById(playerId).orElseGet(() -> new Player("anonymous").setId(playerId));
+    public void onAction(@Payload Map<String, Object> payload, SimpMessageHeaderAccessor accessor) {
+        Player player = playerOf(payload, accessor);
         engine.dispatchAction(player, payload);
     }
 
@@ -55,5 +65,50 @@ public class GameController {
     public void onStop() {
         engine.stopCurrent();
         invitations.cancel();
+    }
+
+    @MessageMapping("/game.draw.select")
+    public void onDrawSelect(@Payload Map<String, Object> payload, SimpMessageHeaderAccessor accessor) {
+        Map<String, Object> p = withAction(payload, "SELECT");
+        engine.dispatchAction(playerOf(payload, accessor), p);
+    }
+
+    @MessageMapping("/game.draw.stroke")
+    public void onDrawStroke(@Payload Map<String, Object> payload, SimpMessageHeaderAccessor accessor) {
+        Map<String, Object> p = withAction(payload, "STROKE");
+        engine.dispatchAction(playerOf(payload, accessor), p);
+    }
+
+    @MessageMapping("/game.draw.guess")
+    public void onDrawGuess(@Payload Map<String, Object> payload, SimpMessageHeaderAccessor accessor) {
+        Map<String, Object> p = withAction(payload, "GUESS");
+        engine.dispatchAction(playerOf(payload, accessor), p);
+    }
+
+    @MessageMapping("/game.draw.clear")
+    public void onDrawClear(@Payload Map<String, Object> payload, SimpMessageHeaderAccessor accessor) {
+        Map<String, Object> p = withAction(payload, "CLEAR");
+        engine.dispatchAction(playerOf(payload, accessor), p);
+    }
+
+    private Player playerOf(Map<String, Object> payload, SimpMessageHeaderAccessor accessor) {
+        String pid = payload == null ? null : (String) payload.get("playerId");
+        if (pid != null) {
+            Player p = room.findById(pid).orElse(null);
+            if (p != null) return p;
+        }
+        // 回退：从 session ip 反查
+        String ip = sessions.getIpBySession(accessor.getSessionId());
+        if (ip != null) {
+            Player p = room.findByIp(ip).orElse(null);
+            if (p != null) return p;
+        }
+        return new Player("anonymous").setId(pid != null ? pid : "");
+    }
+
+    private static Map<String, Object> withAction(Map<String, Object> orig, String action) {
+        Map<String, Object> next = orig == null ? new HashMap<>() : new HashMap<>(orig);
+        next.put("action", action);
+        return next;
     }
 }

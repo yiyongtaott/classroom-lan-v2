@@ -4,9 +4,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import org.lanclassroom.core.util.NodeIdGenerator;
 import org.lanclassroom.net.api.DiscoveryMessage;
+import org.lanclassroom.net.service.UserStatusService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -20,6 +22,7 @@ import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Enumeration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,7 +36,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * 职责：
  *   1. 启动时 join multicast group
  *   2. 每 2s 广播一次 HELLO（携带 nodeId / version / 当前 host 信仰 / hostname）
- *   3. 接收回路解析 HELLO → 更新 HostElector + 维护 ip↔node 关联表
+ *   3. 接收回路解析 HELLO → 更新 HostElector + 维护 ip↔node 关联表 + UDP 心跳计入 UserStatusService
  *   4. 周期判断：本机非 Host 时自动打开浏览器跳到 Host 的前端页面
  */
 @Service
@@ -58,6 +61,8 @@ public class DiscoveryService implements DisposableBean {
     private boolean autoOpenBrowser;
 
     private final HostElector elector;
+    /** 用 ObjectProvider 避免与 UserStatusService 之间的循环依赖。 */
+    private final ObjectProvider<UserStatusService> userStatusProvider;
     private final ObjectMapper mapper = new ObjectMapper();
     /** nodeId → 该节点的源 IP（用于打开 Host 前端页面）。 */
     private final Map<String, String> nodeIpMap = new ConcurrentHashMap<>();
@@ -73,8 +78,10 @@ public class DiscoveryService implements DisposableBean {
     private Thread receiverThread;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
-    public DiscoveryService(HostElector elector) {
+    public DiscoveryService(HostElector elector,
+                            ObjectProvider<UserStatusService> userStatusProvider) {
         this.elector = elector;
+        this.userStatusProvider = userStatusProvider;
     }
 
     @PostConstruct
@@ -108,6 +115,11 @@ public class DiscoveryService implements DisposableBean {
 
     private void tick() {
         sendHello();
+        // 自身 UDP 心跳也写入 UserStatusService（让 host 也有第一圆）
+        UserStatusService userStatus = userStatusProvider.getIfAvailable();
+        if (userStatus != null) {
+            userStatus.updateUdpHeartbeat(NodeIdGenerator.getNodeId(), Instant.now());
+        }
         if (autoOpenBrowser) {
             maybeOpenHostPage();
         }
@@ -198,6 +210,12 @@ public class DiscoveryService implements DisposableBean {
                     }
                 }
                 elector.onPeer(msg.getId(), msg.getVersion(), msg.isHost(), msg.getHostname());
+
+                // 任务 3 状态一：UDP 心跳计入
+                UserStatusService userStatus = userStatusProvider.getIfAvailable();
+                if (userStatus != null) {
+                    userStatus.updateUdpHeartbeat(msg.getId(), Instant.now());
+                }
             } catch (Exception e) {
                 if (running.get() && !socket.isClosed()) {
                     log.warn("[Discovery] receive error: {}", e.getMessage());

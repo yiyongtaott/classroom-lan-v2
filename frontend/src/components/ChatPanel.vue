@@ -34,30 +34,31 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useRoomStore } from '../stores/room'
+import { useUserListStore } from '../stores/userList'
 import { useStomp } from '../composables/useStomp'
-import { TOPIC, APP } from '../appConfig'
+import { APP } from '../appConfig'
 import Avatar from './Avatar.vue'
 import PlayerChip from './PlayerChip.vue'
 
 const roomStore = useRoomStore()
+const userList = useUserListStore()
 const stomp = useStomp()
 
 const text = ref('')
 const msgBox = ref(null)
-let unsub = null
 
-const players = computed(() => roomStore.players)
+const players = computed(() => userList.users)
 const messages = computed(() => roomStore.messages)
 
 function senderOf(msg) {
   if (!msg) return null
   if (msg.senderId) {
-    const p = roomStore.players.find(x => x.id === msg.senderId)
+    const p = userList.find(msg.senderId)
     if (p) return p
   }
-  return roomStore.players.find(x => x.name === msg.sender) || { name: msg.sender }
+  return userList.users.find(x => x.name === msg.sender) || { name: msg.sender }
 }
 
 function shortTime(ts) {
@@ -84,17 +85,7 @@ function send() {
 }
 
 watch(messages, () => scrollToBottom(), { deep: true, flush: 'post' })
-
-onMounted(() => {
-  scrollToBottom()
-  unsub = stomp.subscribe(TOPIC.CHAT, (msg) => {
-    roomStore.appendMessage(msg)
-  })
-})
-
-onBeforeUnmount(() => {
-  if (unsub) unsub()
-})
+onMounted(() => scrollToBottom())
 </script>
 
 <style scoped>

@@ -37,7 +37,8 @@ const uploading = ref(false)
 const progress = ref(0)
 const error = ref('')
 const list = ref([])
-let unsub = null
+let unsubProgress = null
+let unsubUploaded = null
 
 async function refresh() {
   try {
@@ -102,11 +103,13 @@ function formatSize(bytes) {
 
 onMounted(async () => {
   await refresh()
-  unsub = stomp.subscribe(TOPIC.FILE_PROGRESS, () => refresh())
+  unsubProgress = stomp.subscribe(TOPIC.FILE_PROGRESS, () => refresh())
+  unsubUploaded = stomp.subscribe(TOPIC.FILE_UPLOADED, () => refresh())
 })
 
 onBeforeUnmount(() => {
-  if (unsub) unsub()
+  if (unsubProgress) unsubProgress()
+  if (unsubUploaded) unsubUploaded()
 })
 </script>
 

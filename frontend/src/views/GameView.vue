@@ -14,15 +14,15 @@
 
     <div v-if="!active" class="lobby">
       <h3>选择游戏发起邀请</h3>
-      <p class="hint">点击后将向所有在线玩家发出邀请，全员接受才会进入游戏；任一玩家强制进入会立即开始。</p>
+      <p class="hint">点击后将向所有在线玩家发出邀请，全员接受才会进入游戏；任一玩家强制进入会立即开始；超半数拒绝会自动取消。</p>
       <div class="games">
         <button class="game-card" @click="startGame('NUMBER_GUESS')" :disabled="!stomp.connected.value">
           <div class="title">🎯 猜数字</div>
           <div class="desc">范围 1–100，最快猜中获胜</div>
         </button>
-        <button class="game-card disabled" disabled>
+        <button class="game-card" @click="startGame('DRAW')" :disabled="!stomp.connected.value">
           <div class="title">🎨 你画我猜</div>
-          <div class="desc">扩展示例（预留）</div>
+          <div class="desc">轮流画图，其他人猜词得分</div>
         </button>
         <button class="game-card disabled" disabled>
           <div class="title">📝 抢答</div>
@@ -37,6 +37,7 @@
             <span class="stage">{{ stageLabel(item.stage) }}</span>
             <span v-if="item.data?.playerName">{{ item.data.playerName }}</span>
             <span v-if="item.data?.value !== undefined">猜 {{ item.data.value }}</span>
+            <span v-if="item.gameType === 'DRAW' && item.data?.drawerName"> drawer={{ item.data.drawerName }}</span>
             <span class="ts" v-if="item.ts">{{ tsLabel(item.ts) }}</span>
           </li>
         </ul>
@@ -45,7 +46,7 @@
     </div>
 
     <div v-else-if="active === 'NUMBER_GUESS'" class="board">
-      <div class="hint">
+      <div class="hint-bar">
         <div>{{ feedback || '猜一个 1–100 之间的整数' }}</div>
         <div class="rounds">回合：{{ rounds }}</div>
       </div>
@@ -67,14 +68,19 @@
         </ul>
       </div>
     </div>
+
+    <div v-else-if="active === 'DRAW'">
+      <DrawAndGuessView />
+    </div>
   </section>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoomStore } from '../stores/room'
 import { useStomp } from '../composables/useStomp'
-import { TOPIC, APP, API_BASE } from '../appConfig'
+import { APP, API_BASE } from '../appConfig'
+import DrawAndGuessView from './games/DrawAndGuessView.vue'
 
 const roomStore = useRoomStore()
 const stomp = useStomp()
@@ -87,14 +93,14 @@ const feedback = ref('')
 
 const active = computed(() => roomStore.gameType)
 const invitation = computed(() => roomStore.invitation)
-const historyEntries = computed(() =>
-  (roomStore.gameLog || []).filter(x => x && x.gameType === 'NUMBER_GUESS')
-)
-
-let unsub = null
+const historyEntries = computed(() => roomStore.gameLog || [])
 
 function stageLabel(stage) {
-  const map = { STARTED: '开局', LOW: '太小', HIGH: '太大', WIN: '猜中', STOPPED: '结束', INVALID: '无效' }
+  const map = {
+    STARTED: '开局', LOW: '太小', HIGH: '太大', WIN: '猜中', STOPPED: '结束', INVALID: '无效',
+    SELECTING: '选词', ROUND_START: '开局', GUESS_CORRECT: '猜中', GUESS_WRONG: '猜错',
+    ROUND_END: '回合结束', GAME_OVER: '游戏结束'
+  }
   return map[stage] || stage || '—'
 }
 
@@ -113,7 +119,6 @@ function startGame(type) {
   winner.value = ''
   feedback.value = ''
   rounds.value = 0
-  // 走邀请流程：服务端会 broadcast 到 /topic/game.invitation，全局对话框接管
   stomp.publish(APP.GAME_START, { type, playerId: roomStore.self?.id })
 }
 
@@ -137,6 +142,7 @@ async function clearHistory() {
 }
 
 function applyState(state) {
+  if (!state || state.gameType !== 'NUMBER_GUESS') return
   liveLog.value.push(state)
   if (liveLog.value.length > 50) liveLog.value.shift()
   if (state.stage === 'WIN') {
@@ -158,24 +164,15 @@ function applyState(state) {
   }
 }
 
-onMounted(async () => {
-  await Promise.all([
-    roomStore.refreshStatus(),
-    roomStore.loadGameHistory()
-  ])
-  unsub = stomp.subscribe(TOPIC.GAME_STATE, (state) => {
-    roomStore.setGameState(state)
-    applyState(state)
-  })
-})
+watch(() => roomStore.lastGameState, applyState, { deep: true })
 
-onBeforeUnmount(() => {
-  if (unsub) unsub()
+onMounted(async () => {
+  await roomStore.loadGameHistory()
 })
 </script>
 
 <style scoped>
-.game { max-width: 900px; margin: 0 auto; }
+.game { max-width: 100%; margin: 0 auto; }
 header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; flex-wrap: wrap; gap: .5rem; }
 header h2 { margin: 0; color: #16a34a; }
 .active { color: #6b7280; font-size: .9rem; }
@@ -192,7 +189,7 @@ header h2 { margin: 0; color: #16a34a; }
 
 .history { margin-top: 2rem; }
 .board { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem; }
-.hint { display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: #f9fafb; border-radius: 6px; margin-bottom: 1rem; }
+.hint-bar { display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: #f9fafb; border-radius: 6px; margin-bottom: 1rem; }
 .rounds { color: #6b7280; font-size: .9rem; }
 .input { display: flex; gap: .5rem; }
 .input input { flex: 1; padding: .55rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 1.1rem; }
@@ -213,7 +210,7 @@ header h2 { margin: 0; color: #16a34a; }
 .log li.low .stage { color: #2563eb; }
 .log li.high .stage { color: #dc2626; }
 .log li.win .stage { color: #16a34a; }
-.log li.started .stage { color: #6b7280; }
-.log li.stopped .stage { color: #6b7280; }
+.log li.started .stage, .log li.round_start .stage { color: #6b7280; }
+.log li.stopped .stage, .log li.game_over .stage { color: #6b7280; }
 @media (max-width: 720px) { .games { grid-template-columns: 1fr; } }
 </style>

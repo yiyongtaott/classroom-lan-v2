@@ -1,6 +1,9 @@
 package org.lanclassroom.net.api;
 
+import jakarta.servlet.http.HttpServletRequest;
+import org.lanclassroom.core.model.Room;
 import org.lanclassroom.net.service.FileStorageService;
+import org.lanclassroom.net.ws.ClientSessionRegistry;
 import org.lanclassroom.net.ws.WebSocketConfig;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -21,12 +24,16 @@ import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * 文件传输 REST 接口。
- * 上传完成后通过 STOMP /topic/file.progress 通知所有客户端刷新列表。
+ *
+ * 上传成功后：
+ *   - /topic/file.progress     - 兼容旧前端，仅触发列表刷新
+ *   - /topic/file.uploaded     - FEATURE-03：携带上传者名 + 文件名 + 大小 + 下载 URL，全员可见
  */
 @RestController
 @RequestMapping("/api/files")
@@ -34,21 +41,47 @@ public class FileController {
 
     private final FileStorageService storage;
     private final SimpMessagingTemplate messaging;
+    private final Room room;
+    private final ClientSessionRegistry sessions;
 
-    public FileController(FileStorageService storage, SimpMessagingTemplate messaging) {
+    public FileController(FileStorageService storage,
+                          SimpMessagingTemplate messaging,
+                          Room room,
+                          ClientSessionRegistry sessions) {
         this.storage = storage;
         this.messaging = messaging;
+        this.room = room;
+        this.sessions = sessions;
     }
 
     @PostMapping("/upload")
     public ResponseEntity<FileStorageService.FileMeta> upload(
-            @RequestParam("file") MultipartFile file) throws IOException {
+            @RequestParam("file") MultipartFile file,
+            HttpServletRequest req) throws IOException {
         FileStorageService.FileMeta meta = storage.store(file);
+
+        String uploaderName = "匿名";
+        String uploaderIp = req.getRemoteAddr();
+        if (uploaderIp != null) {
+            uploaderName = room.findByIp(uploaderIp).map(p -> p.getName()).orElse(uploaderName);
+        }
+
+        // 兼容旧前端
         messaging.convertAndSend(WebSocketConfig.TOPIC_FILE_PROGRESS, Map.of(
                 "stage", "UPLOADED",
                 "id", meta.id(),
                 "name", meta.name(),
                 "size", meta.size()));
+
+        // FEATURE-03 全员可见提示
+        Map<String, Object> notify = new HashMap<>();
+        notify.put("uploaderName", uploaderName);
+        notify.put("fileName", meta.name());
+        notify.put("fileSize", meta.size());
+        notify.put("downloadUrl", "/api/files/" + meta.id());
+        notify.put("uploadedAt", meta.uploadedAt());
+        messaging.convertAndSend(WebSocketConfig.TOPIC_FILE_UPLOADED, notify);
+
         return ResponseEntity.ok(meta);
     }
 
@@ -58,7 +91,7 @@ public class FileController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Resource> download(@PathVariable String id) {
+    public ResponseEntity<Resource> download(@PathVariable("id") String id) {
         FileStorageService.FileMeta meta = storage.get(id);
         if (meta == null) {
             return ResponseEntity.notFound().build();
@@ -73,7 +106,7 @@ public class FileController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable String id) {
+    public ResponseEntity<Void> delete(@PathVariable("id") String id) {
         boolean ok = storage.delete(id);
         if (ok) {
             messaging.convertAndSend(WebSocketConfig.TOPIC_FILE_PROGRESS, Map.of(

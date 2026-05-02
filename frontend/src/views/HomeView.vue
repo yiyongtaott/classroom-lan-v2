@@ -6,26 +6,26 @@
     <div class="grid">
       <div class="card">
         <div class="card-title">本机角色（你的视角）</div>
-        <div :class="['role', roomStore.isHost ? 'host' : 'client']">
-          {{ roomStore.isHost ? 'HOST（本机即后端）' : 'CUSTOMER（普通客户端）' }}
+        <div :class="['role', appStore.isHost ? 'host' : 'client']">
+          {{ appStore.isHost ? 'HOST（本机即后端）' : 'CUSTOMER（普通客户端）' }}
         </div>
         <dl>
-          <dt>本机 IP</dt><dd>{{ roomStore.nodeId || '—' }}</dd>
+          <dt>本机 IP</dt><dd>{{ appStore.selfNodeId || '—' }}</dd>
           <dt>系统名</dt>
-          <dd>{{ roomStore.hostname || '—' }}</dd>
+          <dd>{{ appStore.selfHostname || '—' }}</dd>
         </dl>
       </div>
 
       <div class="card">
         <div class="card-title">当前 Host</div>
-        <div class="role host" v-if="roomStore.hostNodeId">
-          {{ roomStore.hostHostname || 'HOST' }}
+        <div class="role host" v-if="appStore.hostNodeId">
+          {{ appStore.hostHostname || 'HOST' }}
         </div>
         <dl>
-          <dt>Host IP</dt><dd>{{ roomStore.hostNodeId || '—' }}</dd>
-          <dt>已发现节点</dt><dd>{{ roomStore.peerCount }}</dd>
-          <dt>玩家数</dt><dd>{{ roomStore.players.length }}</dd>
-          <dt>当前游戏</dt><dd>{{ roomStore.gameType || '空闲' }}</dd>
+          <dt>Host IP</dt><dd>{{ appStore.hostNodeId || '—' }}</dd>
+          <dt>已发现节点</dt><dd>{{ appStore.peerCount }}</dd>
+          <dt>玩家数</dt><dd>{{ userList.users.length }}</dd>
+          <dt>当前游戏</dt><dd>{{ appStore.gameType || '空闲' }}</dd>
         </dl>
         <div class="actions" v-if="!roomStore.hasJoined">
           <router-link to="/join" class="btn primary">加入房间</router-link>
@@ -34,22 +34,19 @@
     </div>
 
     <div class="tip" v-if="roomStore.hasJoined">
-      <p>左侧是聊天 + 在线玩家，右侧是账号设置。导航栏可切换游戏 / 文件。</p>
+      <p>左侧是聊天 + 在线玩家，右侧是账号设置。导航栏可切换游戏 / 文件。点击在线列表里任意用户可查看资料并发起私聊。</p>
     </div>
   </section>
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
 import { useRoomStore } from '../stores/room'
+import { useAppStore } from '../stores/app'
+import { useUserListStore } from '../stores/userList'
 
 const roomStore = useRoomStore()
-
-async function refresh() {
-  await Promise.all([roomStore.refreshStatus(), roomStore.refreshSnapshot().catch(() => {})])
-}
-
-onMounted(refresh)
+const appStore = useAppStore()
+const userList = useUserListStore()
 </script>
 
 <style scoped>
