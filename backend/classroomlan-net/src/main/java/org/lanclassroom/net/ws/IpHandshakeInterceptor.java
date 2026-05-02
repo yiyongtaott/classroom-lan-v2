@@ -11,6 +11,7 @@ import org.springframework.web.socket.server.HandshakeInterceptor;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.util.Map;
 
 /**
@@ -45,11 +46,25 @@ public class IpHandshakeInterceptor implements HandshakeInterceptor {
             if (forwarded != null && !forwarded.isBlank()) {
                 return forwarded.split(",")[0].trim();
             }
-            return s.getServletRequest().getRemoteAddr();
+            String ip = s.getServletRequest().getRemoteAddr();
+            return transferIp(ip);
         }
         InetSocketAddress remote = request.getRemoteAddress();
         if (remote == null) return null;
         InetAddress addr = remote.getAddress();
-        return addr == null ? null : addr.getHostAddress();
+        String ip = addr == null ? null : addr.getHostAddress();
+        return transferIp(ip);
+    }
+
+    private static String transferIp(String ip) {
+        if ("0:0:0:0:0:0:0:1".equals(ip)) ip = "127.0.0.1";
+        if ("127.0.0.1".equals(ip)) {
+            try {
+                return InetAddress.getLocalHost().getHostAddress();
+            } catch (UnknownHostException e) {
+                log.error("无法获取本地局域网IP", e);
+            }
+        }
+        return ip;
     }
 }

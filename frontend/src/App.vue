@@ -64,7 +64,6 @@ const reconnectMsg = computed(() =>
 
 onMounted(async () => {
   ws.init()
-
   // 启动时尝试同 IP 复用账号
   await roomStore.bootstrap(appStore.selfHostname)
   // 一旦 STOMP 连上 + 已加入 → 发 player.online 帧；

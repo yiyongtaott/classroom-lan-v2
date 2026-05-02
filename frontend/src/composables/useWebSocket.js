@@ -43,6 +43,7 @@ export function useWebSocket() {
   function track(unsub) { if (unsub) unsubs.push(unsub) }
 
   function reportPageActive() {
+    console.log('stomp.connected.value:'+stomp.connected.value)
     if (!stomp.connected.value) return
     const active = document.visibilityState === 'visible'
     stomp.publish(APP.PAGE_ACTIVE, { active })

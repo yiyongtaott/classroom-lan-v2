@@ -10,6 +10,7 @@ import org.lanclassroom.net.service.UserStatusService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
+import org.springframework.messaging.Message;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
@@ -62,13 +63,19 @@ public class WebSocketEventListener {
 
     @EventListener
     public void onConnected(SessionConnectedEvent ev) {
-        SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.wrap(ev.getMessage());
+        Message<?> message = ev.getMessage();
+        SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.wrap(message);
         String sessionId = accessor.getSessionId();
-        Map<String, Object> sessionAttrs = accessor.getSessionAttributes();
-        String clientIp = sessionAttrs == null
-                ? null
-                : (String) sessionAttrs.get(IpHandshakeInterceptor.ATTR_CLIENT_IP);
 
+        // 取出嵌套的 CONNECT 消息，再取它的属性
+        Object connectObj = message.getHeaders().get("simpConnectMessage");
+        String clientIp = null;
+        if (connectObj instanceof Message<?> connectMsg) {
+            Object attrs = connectMsg.getHeaders().get("simpSessionAttributes");
+            if (attrs instanceof Map) {
+                clientIp = (String) ((Map<?, ?>) attrs).get("clientIp");
+            }
+        }
         if (sessionId != null && clientIp != null) {
             registry.register(sessionId, clientIp);
             log.info("[WS] connected sid={} ip={}", sessionId, clientIp);

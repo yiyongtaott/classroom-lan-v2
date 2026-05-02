@@ -14,4 +14,198 @@
   },
   "playerCount" : 2,
   "ts" : 1777692154101
+}, {
+  "gameType" : "DRAW",
+  "stage" : "SELECTING",
+  "data" : {
+    "drawerId" : "c0c033b4-29be-4844-9a6c-36c72330479c",
+    "drawerName" : "电脑v111"
+  },
+  "ts" : 1777706986743
+}, {
+  "gameType" : "DRAW",
+  "stage" : "GAME_OVER",
+  "data" : {
+    "scores" : {
+      "c0c033b4-29be-4844-9a6c-36c72330479c" : 0,
+      "936ef37e-f5dd-4a46-a00d-f118ce0e6bac" : 0
+    }
+  },
+  "ts" : 1777707032271
+}, {
+  "gameType" : "NUMBER_GUESS",
+  "stage" : "STARTED",
+  "data" : {
+    "range" : "1-100"
+  },
+  "playerCount" : 2,
+  "ts" : 1777707179044
+}, {
+  "gameType" : "NUMBER_GUESS",
+  "stage" : "LOW",
+  "data" : {
+    "playerId" : "c0c033b4-29be-4844-9a6c-36c72330479c",
+    "playerName" : "电脑v111",
+    "rounds" : 1,
+    "value" : 50
+  },
+  "playerCount" : 2,
+  "ts" : 1777707187122
+}, {
+  "gameType" : "NUMBER_GUESS",
+  "stage" : "HIGH",
+  "data" : {
+    "playerId" : "936ef37e-f5dd-4a46-a00d-f118ce0e6bac",
+    "playerName" : "笔记本v123",
+    "rounds" : 2,
+    "value" : 90
+  },
+  "playerCount" : 2,
+  "ts" : 1777707192244
+}, {
+  "gameType" : "NUMBER_GUESS",
+  "stage" : "HIGH",
+  "data" : {
+    "playerId" : "c0c033b4-29be-4844-9a6c-36c72330479c",
+    "playerName" : "电脑v111",
+    "rounds" : 3,
+    "value" : 80
+  },
+  "playerCount" : 2,
+  "ts" : 1777707198551
+}, {
+  "gameType" : "NUMBER_GUESS",
+  "stage" : "HIGH",
+  "data" : {
+    "playerId" : "c0c033b4-29be-4844-9a6c-36c72330479c",
+    "playerName" : "电脑v111",
+    "rounds" : 4,
+    "value" : 80
+  },
+  "playerCount" : 2,
+  "ts" : 1777707199160
+}, {
+  "gameType" : "NUMBER_GUESS",
+  "stage" : "LOW",
+  "data" : {
+    "playerId" : "c0c033b4-29be-4844-9a6c-36c72330479c",
+    "playerName" : "电脑v111",
+    "rounds" : 5,
+    "value" : 60
+  },
+  "playerCount" : 2,
+  "ts" : 1777707203167
+}, {
+  "gameType" : "NUMBER_GUESS",
+  "stage" : "HIGH",
+  "data" : {
+    "playerId" : "c0c033b4-29be-4844-9a6c-36c72330479c",
+    "playerName" : "电脑v111",
+    "rounds" : 6,
+    "value" : 70
+  },
+  "playerCount" : 2,
+  "ts" : 1777707205534
+}, {
+  "gameType" : "NUMBER_GUESS",
+  "stage" : "WIN",
+  "data" : {
+    "playerId" : "c0c033b4-29be-4844-9a6c-36c72330479c",
+    "playerName" : "电脑v111",
+    "rounds" : 7,
+    "value" : 65
+  },
+  "playerCount" : 2,
+  "ts" : 1777707208966
+}, {
+  "gameType" : "NUMBER_GUESS",
+  "stage" : "STOPPED",
+  "data" : {
+    "rounds" : 7
+  },
+  "playerCount" : 2,
+  "ts" : 1777707212826
+}, {
+  "gameType" : "NUMBER_GUESS",
+  "stage" : "STARTED",
+  "data" : {
+    "range" : "1-100"
+  },
+  "playerCount" : 2,
+  "ts" : 1777707559834
+}, {
+  "gameType" : "NUMBER_GUESS",
+  "stage" : "STOPPED",
+  "data" : {
+    "rounds" : 0
+  },
+  "playerCount" : 2,
+  "ts" : 1777707561144
+}, {
+  "gameType" : "DRAW",
+  "stage" : "SELECTING",
+  "data" : {
+    "drawerId" : "c0c033b4-29be-4844-9a6c-36c72330479c",
+    "drawerName" : "电脑v111"
+  },
+  "ts" : 1777707573408
+}, {
+  "gameType" : "DRAW",
+  "stage" : "GAME_OVER",
+  "data" : {
+    "scores" : {
+      "c0c033b4-29be-4844-9a6c-36c72330479c" : 0,
+      "936ef37e-f5dd-4a46-a00d-f118ce0e6bac" : 0
+    }
+  },
+  "ts" : 1777707581825
+}, {
+  "gameType" : "NUMBER_GUESS",
+  "stage" : "STARTED",
+  "data" : {
+    "range" : "1-100"
+  },
+  "playerCount" : 1,
+  "ts" : 1777711936650
+}, {
+  "gameType" : "NUMBER_GUESS",
+  "stage" : "STOPPED",
+  "data" : {
+    "rounds" : 0
+  },
+  "playerCount" : 1,
+  "ts" : 1777711939731
+}, {
+  "gameType" : "DRAW",
+  "stage" : "SELECTING",
+  "data" : {
+    "drawerId" : "8115eb2e-7f01-4832-8a67-e189af173fdd",
+    "drawerName" : "flandretiamat"
+  },
+  "ts" : 1777711942228
+}, {
+  "gameType" : "DRAW",
+  "stage" : "GAME_OVER",
+  "data" : {
+    "scores" : {
+      "8115eb2e-7f01-4832-8a67-e189af173fdd" : 0
+    }
+  },
+  "ts" : 1777712115157
+}, {
+  "gameType" : "NUMBER_GUESS",
+  "stage" : "STARTED",
+  "data" : {
+    "range" : "1-100"
+  },
+  "playerCount" : 1,
+  "ts" : 1777712115158
+}, {
+  "gameType" : "NUMBER_GUESS",
+  "stage" : "STOPPED",
+  "data" : {
+    "rounds" : 0
+  },
+  "playerCount" : 1,
+  "ts" : 1777712116800
 } ]

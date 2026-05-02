@@ -56,6 +56,7 @@ export const useUserListStore = defineStore('userList', () => {
 
   /** 三状态圆点（任务 3）。 */
   function updateStatus(payload) {
+    console.log(payload)
     if (!payload || !payload.userId) return
     // userId 在后端是 player.id（注意：UserStatusService 的 record.userId 也存的是 player.id）
     const u = users.value.find(x => x.id === payload.userId)

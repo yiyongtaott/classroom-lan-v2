@@ -11,6 +11,8 @@ import org.springframework.stereotype.Controller;
 
 import java.util.Map;
 
+import static org.lanclassroom.net.discovery.DiscoveryService.log;
+
 /**
  * 玩家在线状态 STOMP 控制器。
  * 客户端 connect 上 /ws 后必须发送 /app/player.online {playerId} 完成绑定。
@@ -59,7 +61,7 @@ public class PlayerController {
         if (ip == null) return;
         Player p = room.findByIp(ip).orElse(null);
         if (p == null) return;
-
+        log.info("[PAGE_ACTIVE] playerId={} active={} 写入后 status={}", p.getId(), active, userStatus);
         userStatus.setPageActive(p.getId(), (Boolean) active);
     }
 }

@@ -2,6 +2,8 @@ package org.lanclassroom.net.discovery;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
+import org.lanclassroom.core.model.Player;
+import org.lanclassroom.core.model.Room;
 import org.lanclassroom.core.util.NodeIdGenerator;
 import org.lanclassroom.net.api.DiscoveryMessage;
 import org.lanclassroom.net.service.UserStatusService;
@@ -42,8 +44,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Service
 public class DiscoveryService implements DisposableBean {
 
-    private static final Logger log = LoggerFactory.getLogger(DiscoveryService.class);
+    public static final Logger log = LoggerFactory.getLogger(DiscoveryService.class);
     public static final String VERSION = "v2";
+
+    private final Room room;
 
     @Value("${app.udp.multicast-group:230.0.0.1}")
     private String groupAddress;
@@ -78,10 +82,10 @@ public class DiscoveryService implements DisposableBean {
     private Thread receiverThread;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
-    public DiscoveryService(HostElector elector,
-                            ObjectProvider<UserStatusService> userStatusProvider) {
+    public DiscoveryService(HostElector elector, ObjectProvider<UserStatusService> userStatusProvider,Room room) {
         this.elector = elector;
         this.userStatusProvider = userStatusProvider;
+        this.room = room;
     }
 
     @PostConstruct
@@ -118,7 +122,11 @@ public class DiscoveryService implements DisposableBean {
         // 自身 UDP 心跳也写入 UserStatusService（让 host 也有第一圆）
         UserStatusService userStatus = userStatusProvider.getIfAvailable();
         if (userStatus != null) {
-            userStatus.updateUdpHeartbeat(NodeIdGenerator.getNodeId(), Instant.now());
+            String selfIp = NodeIdGenerator.getNodeId();
+            String uuid = room.findByIp(selfIp).map(Player::getId).orElse(null);
+            if (uuid != null) {
+                userStatus.updateUdpHeartbeat(uuid, Instant.now());
+            }
         }
         if (autoOpenBrowser) {
             maybeOpenHostPage();
@@ -214,7 +222,10 @@ public class DiscoveryService implements DisposableBean {
                 // 任务 3 状态一：UDP 心跳计入
                 UserStatusService userStatus = userStatusProvider.getIfAvailable();
                 if (userStatus != null) {
-                    userStatus.updateUdpHeartbeat(msg.getId(), Instant.now());
+                    String uuid = room.findByIp(senderIp).map(Player::getId).orElse(null);
+                    if (uuid != null) {
+                        userStatus.updateUdpHeartbeat(uuid, Instant.now());
+                    }
                 }
             } catch (Exception e) {
                 if (running.get() && !socket.isClosed()) {
