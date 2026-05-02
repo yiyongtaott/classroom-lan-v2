@@ -5,7 +5,9 @@ import org.lanclassroom.core.model.Player;
 import org.lanclassroom.core.model.Room;
 import org.lanclassroom.core.model.RoomSnapshot;
 import org.lanclassroom.core.util.NodeIdGenerator;
+import org.lanclassroom.net.discovery.DiscoveryService;
 import org.lanclassroom.net.discovery.HostElector;
+import org.lanclassroom.net.service.AvatarStorageService;
 import org.lanclassroom.net.service.GameEngine;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,17 +23,6 @@ import java.net.InetAddress;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * 房间 / 节点状态 REST API。
- *
- * 关键语义（Bug 2）：/api/status 返回的是"访问者视角"。
- *   - nodeId    = 访问者本机 IP（HTTP 请求的来源 IP）
- *   - host      = 访问者是否就是 Host 自己（同 IP 或 loopback）
- *   - hostNodeId / hostHostname 始终代表当前 Host
- *
- * 这样 Host 自己用浏览器访问看到的是 HOST，
- * 其他人访问 Host 提供的同一页面看到的是 CLIENT 且 nodeId 是自己机器的 IP。
- */
 @RestController
 @RequestMapping("/api")
 public class RoomController {
@@ -39,25 +30,36 @@ public class RoomController {
     private final HostElector elector;
     private final Room room;
     private final GameEngine engine;
+    private final DiscoveryService discovery;
+    private final AvatarStorageService avatars;
 
-    public RoomController(HostElector elector, Room room, GameEngine engine) {
+    public RoomController(HostElector elector, Room room, GameEngine engine,
+                          DiscoveryService discovery, AvatarStorageService avatars) {
         this.elector = elector;
         this.room = room;
         this.engine = engine;
+        this.discovery = discovery;
+        this.avatars = avatars;
     }
 
+    /**
+     * 节点状态 - 访问者视角。
+     * Bug 10: 即使访问者不是 Host，也尝试通过 IP 反查它本机后端通报的 hostname。
+     */
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> status(HttpServletRequest req) {
         String hostIp = NodeIdGenerator.getNodeId();
         String accessorIp = resolveClientIp(req);
         boolean accessorIsHost = isAccessorTheHost(accessorIp, hostIp);
 
+        String accessorHostname = accessorIsHost
+                ? NodeIdGenerator.getHostname()
+                : discovery.hostnameByIp(accessorIp);
+
         Map<String, Object> result = new HashMap<>();
-        // 访问者视角
         result.put("nodeId", accessorIsHost ? hostIp : accessorIp);
-        result.put("hostname", accessorIsHost ? NodeIdGenerator.getHostname() : null);
+        result.put("hostname", accessorHostname);
         result.put("host", accessorIsHost);
-        // Host 元信息（共享）
         result.put("hostNodeId", elector.electHost());
         result.put("hostHostname", NodeIdGenerator.getHostname());
         result.put("peerCount", elector.peerCount());
@@ -72,30 +74,58 @@ public class RoomController {
         return ResponseEntity.ok(room.snapshot());
     }
 
+    /**
+     * Bug 4: 通过来源 IP 查"本机已有玩家"。
+     * 用于无痕浏览器打开时不重复创建账号。
+     */
+    @GetMapping("/me")
+    public ResponseEntity<Player> me(HttpServletRequest req) {
+        String ip = resolveDisplayIp(req);
+        return room.findByIp(ip)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
+     * 加入 / 重连 / 改名 / 改头像统一入口。
+     * Bug 4: 同 IP 已有 player → 直接返回（可选更新 name）。
+     */
     @PostMapping("/room/players")
     public ResponseEntity<Player> joinRoom(@RequestBody Map<String, String> body,
                                            HttpServletRequest req) {
         String name = body == null ? null : body.get("name");
         String hostname = body == null ? null : body.get("hostname");
-        String avatar = body == null ? null : body.get("avatar");
-        String accessorIp = resolveClientIp(req);
+        String accessorIp = resolveDisplayIp(req);
 
-        // 显示用 IP：访问者是 Host 时取本机 IP，否则取 HTTP 来源 IP
-        String displayIp = isAccessorTheHost(accessorIp, NodeIdGenerator.getNodeId())
-                ? NodeIdGenerator.getNodeId()
-                : accessorIp;
+        // 同 IP 已有玩家 → 复用
+        Player existing = room.findByIp(accessorIp).orElse(null);
+        if (existing != null) {
+            if (name != null && !name.isBlank() && !name.equals(existing.getName())) {
+                avatars.renameUser(existing.getName(), name.trim());
+                existing.setName(name.trim());
+            }
+            if (hostname != null && !hostname.isBlank()) {
+                existing.setHostname(hostname);
+            }
+            // 用最新头像（按用户名查）
+            avatars.avatarUrlOf(existing.getName()).ifPresent(existing::setAvatar);
+            return ResponseEntity.ok(existing);
+        }
 
-        // 默认昵称：客户端 hostname / IP / "玩家"
+        // 默认昵称：客户端 hostname / IP
         String finalName = (name != null && !name.isBlank())
-                ? name
+                ? name.trim()
                 : (hostname != null && !hostname.isBlank()
                     ? hostname
-                    : (displayIp != null ? displayIp : "玩家"));
+                    : (accessorIp != null ? accessorIp : "玩家"));
 
         Player player = new Player(finalName)
-                .setIp(displayIp)
-                .setHostname(hostname)
-                .setAvatar(avatar);
+                .setIp(accessorIp)
+                .setHostname(hostname);
+
+        // 已有头像 map 命中则恢复
+        avatars.avatarUrlOf(finalName).ifPresent(player::setAvatar);
+
         room.addPlayer(player);
         return ResponseEntity.ok(player);
     }
@@ -115,12 +145,20 @@ public class RoomController {
         }
         if (body != null) {
             String name = body.get("name");
-            if (name != null && !name.isBlank()) {
+            if (name != null && !name.isBlank() && !name.equals(p.getName())) {
+                avatars.renameUser(p.getName(), name.trim());
                 p.setName(name.trim());
+                // 重新查 avatar 绑定
+                avatars.avatarUrlOf(p.getName()).ifPresent(p::setAvatar);
             }
             String avatar = body.get("avatar");
             if (avatar != null) {
-                p.setAvatar(avatar.isBlank() ? null : avatar);
+                if (avatar.isBlank()) {
+                    avatars.clearFor(p.getName());
+                    p.setAvatar(null);
+                } else {
+                    p.setAvatar(avatar);
+                }
             }
         }
         return ResponseEntity.ok(p);
@@ -143,7 +181,16 @@ public class RoomController {
         return req.getRemoteAddr();
     }
 
-    /** 访问者是否就是 Host 自己（同 IP / loopback）。 */
+    /** 用于展示的 IP：把 loopback 折叠为 host 自己的 LAN IP，让 host 自己也归在唯一身份下。 */
+    private String resolveDisplayIp(HttpServletRequest req) {
+        String raw = resolveClientIp(req);
+        if (raw == null) return null;
+        if (isAccessorTheHost(raw, NodeIdGenerator.getNodeId())) {
+            return NodeIdGenerator.getNodeId();
+        }
+        return raw;
+    }
+
     private static boolean isAccessorTheHost(String accessorIp, String hostIp) {
         if (accessorIp == null) return false;
         if (accessorIp.equals(hostIp)) return true;

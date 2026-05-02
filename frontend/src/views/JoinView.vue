@@ -1,21 +1,15 @@
 <template>
   <section class="join">
     <h2>加入房间</h2>
-    <p class="hint">默认昵称使用系统名 + IP，如不喜欢可自行修改。无需密钥 / Token（业务文档 §1.2）。</p>
+    <p class="hint">默认昵称使用系统名 + IP，如不喜欢可修改。无需密钥。</p>
 
     <form @submit.prevent="submit">
-      <div class="row" style="align-items:center;gap:1rem;">
+      <div class="profile-row">
         <div class="avatar-picker" @click="pickAvatar">
           <img v-if="avatarPreview" :src="avatarPreview" alt="avatar" />
           <span v-else>选头像</span>
         </div>
-        <input
-          ref="avatarInput"
-          type="file"
-          accept="image/*"
-          style="display:none"
-          @change="onAvatarPick"
-        />
+        <input ref="avatarInput" type="file" accept="image/*" style="display:none" @change="onAvatarPick" />
         <div class="me-info">
           <div><strong>{{ roomStore.hostname || '本机' }}</strong></div>
           <div class="muted">{{ roomStore.nodeId || '—' }}</div>
@@ -26,6 +20,8 @@
         昵称
         <input v-model.trim="name" maxlength="24" placeholder="昵称" autofocus />
       </label>
+
+      <p class="note" v-if="avatarFile">头像将在加入后自动上传到 host</p>
 
       <div class="row">
         <button type="submit" class="btn primary" :disabled="!canSubmit || loading">
@@ -42,9 +38,11 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useRoomStore } from '../stores/room'
+import { useToastStore } from '../stores/toast'
 
 const router = useRouter()
 const roomStore = useRoomStore()
+const toastStore = useToastStore()
 
 const name = ref('')
 const avatarFile = ref(null)
@@ -56,18 +54,14 @@ const avatarInput = ref(null)
 const canSubmit = computed(() => name.value.length > 0)
 
 function defaultName() {
-  const remembered = localStorage.getItem('lastName')
-  if (remembered) return remembered
-  if (roomStore.hostname) return roomStore.hostname
-  if (roomStore.nodeId) return roomStore.nodeId
-  return ''
+  return localStorage.getItem('lastName') || roomStore.hostname || roomStore.nodeId || ''
 }
 
 onMounted(async () => {
-  try {
-    await roomStore.refreshStatus()
-  } catch {}
+  try { await roomStore.refreshStatus() } catch {}
   if (!name.value) name.value = defaultName()
+  // 已经是已加入用户 → 直接跳走
+  if (roomStore.hasJoined) router.replace('/')
 })
 
 watch(() => roomStore.hostname, () => {
@@ -95,13 +89,13 @@ async function submit() {
     if (avatarFile.value) {
       try {
         await roomStore.uploadAvatar(avatarFile.value)
+        toastStore.push({ type: 'ok', icon: '🖼️', title: '头像已上传' })
       } catch (e) {
-        // 头像失败不阻塞加入
-        console.warn('avatar upload failed', e)
+        toastStore.push({ type: 'warn', icon: '⚠️', title: '头像上传失败', body: e.message })
       }
     }
     localStorage.setItem('lastName', name.value)
-    router.push('/chat')
+    router.push('/')
   } catch (e) {
     error.value = '加入失败：' + e.message
   } finally {
@@ -111,17 +105,10 @@ async function submit() {
 </script>
 
 <style scoped>
-.join { max-width: 480px; margin: 2rem auto; padding: 1.75rem; background: white; border: 1px solid #e5e7eb; border-radius: 8px; }
+.join { max-width: 480px; margin: 0 auto; padding: 1.5rem; background: white; border: 1px solid #e5e7eb; border-radius: 8px; }
 h2 { margin-top: 0; color: #16a34a; }
 .hint { color: #6b7280; font-size: .9rem; }
-label { display: block; margin: 1.25rem 0; }
-input[type=text], input:not([type]) { display: block; width: 100%; padding: .55rem; margin-top: .35rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 1rem; }
-.row { display: flex; gap: .5rem; margin-top: 1rem; }
-.btn { padding: .55rem 1.1rem; border-radius: 6px; border: 1px solid #d1d5db; background: white; color: #1f2937; text-decoration: none; }
-.btn.primary { background: #16a34a; color: white; border-color: #16a34a; }
-.btn.primary:disabled { background: #9ca3af; border-color: #9ca3af; cursor: not-allowed; }
-.error { color: #dc2626; margin-top: .75rem; font-size: .9rem; }
-
+.profile-row { display: flex; align-items: center; gap: 1rem; margin: 1rem 0; }
 .avatar-picker {
   width: 64px; height: 64px; border-radius: 50%;
   border: 2px dashed #d1d5db; cursor: pointer;
@@ -133,4 +120,15 @@ input[type=text], input:not([type]) { display: block; width: 100%; padding: .55r
 .avatar-picker img { width: 100%; height: 100%; object-fit: cover; }
 .me-info { line-height: 1.4; }
 .muted { color: #6b7280; font-size: .85rem; font-family: ui-monospace, monospace; }
+label { display: block; margin: 1rem 0; }
+input[type=text], input:not([type]) {
+  display: block; width: 100%; padding: .55rem; margin-top: .35rem;
+  border: 1px solid #d1d5db; border-radius: 6px; font-size: 1rem;
+}
+.row { display: flex; gap: .5rem; margin-top: 1rem; }
+.note { color: #6b7280; font-size: .8rem; }
+.btn { padding: .55rem 1.1rem; border-radius: 6px; border: 1px solid #d1d5db; background: white; color: #1f2937; text-decoration: none; }
+.btn.primary { background: #16a34a; color: white; border-color: #16a34a; }
+.btn.primary:disabled { background: #9ca3af; border-color: #9ca3af; cursor: not-allowed; }
+.error { color: #dc2626; margin-top: .75rem; font-size: .9rem; }
 </style>

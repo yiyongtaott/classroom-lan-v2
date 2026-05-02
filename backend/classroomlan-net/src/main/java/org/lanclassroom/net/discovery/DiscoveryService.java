@@ -32,8 +32,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * UDP 组播发现服务。
  * 职责：
  *   1. 启动时 join multicast group
- *   2. 每 2s 广播一次 HELLO（携带本机 nodeId + version）
- *   3. 接收回路解析 HELLO → 更新 HostElector + 维护 nodeId→IP 映射
+ *   2. 每 2s 广播一次 HELLO（携带 nodeId / version / 当前 host 信仰 / hostname）
+ *   3. 接收回路解析 HELLO → 更新 HostElector + 维护 ip↔node 关联表
  *   4. 周期判断：本机非 Host 时自动打开浏览器跳到 Host 的前端页面
  */
 @Service
@@ -59,9 +59,11 @@ public class DiscoveryService implements DisposableBean {
 
     private final HostElector elector;
     private final ObjectMapper mapper = new ObjectMapper();
-    /** 已知节点 → 最近一次发包的源 IP（用于打开 Host 前端页面）。 */
+    /** nodeId → 该节点的源 IP（用于打开 Host 前端页面）。 */
     private final Map<String, String> nodeIpMap = new ConcurrentHashMap<>();
-    /** 已经为哪个 Host 打开过浏览器（避免重复打开）。null 表示未打开。 */
+    /** IP → 该节点的 hostname（Bug 10：用于在 host 端展示客户端的系统名）。 */
+    private final Map<String, String> ipHostnameMap = new ConcurrentHashMap<>();
+
     private volatile String openedForHostId = null;
 
     private MulticastSocket socket;
@@ -80,7 +82,7 @@ public class DiscoveryService implements DisposableBean {
         this.group = InetAddress.getByName(groupAddress);
         this.socket = new MulticastSocket(port);
         this.socket.setReuseAddress(true);
-        this.socket.setTimeToLive(1); // 仅本地段
+        this.socket.setTimeToLive(1);
         this.networkInterface = pickInterface();
         this.socket.joinGroup(new InetSocketAddress(group, port), networkInterface);
 
@@ -104,7 +106,6 @@ public class DiscoveryService implements DisposableBean {
                 serverPort);
     }
 
-    /** 每个 tick：发 HELLO + 检查是否需要跳转到 Host 页面。 */
     private void tick() {
         sendHello();
         if (autoOpenBrowser) {
@@ -114,7 +115,11 @@ public class DiscoveryService implements DisposableBean {
 
     private void sendHello() {
         try {
-            DiscoveryMessage msg = DiscoveryMessage.hello(NodeIdGenerator.getNodeId(), VERSION);
+            DiscoveryMessage msg = DiscoveryMessage.hello(
+                    NodeIdGenerator.getNodeId(),
+                    VERSION,
+                    elector.isHost(),
+                    NodeIdGenerator.getHostname());
             byte[] data = mapper.writeValueAsBytes(msg);
             socket.send(new DatagramPacket(data, data.length, group, port));
         } catch (Exception e) {
@@ -128,20 +133,16 @@ public class DiscoveryService implements DisposableBean {
         String selfId = NodeIdGenerator.getNodeId();
         String hostId = elector.electHost();
 
-        // 已为当前 Host 打开过 → 跳过（含本机刚成为 Host 的情况）
         if (hostId.equals(openedForHostId)) {
             return;
         }
-        // 决定打开的目标地址：
-        //   selfId == hostId → 本机 Host，直接走 localhost（避免被代理或 hosts 干扰）
-        //   否则用 nodeIpMap 拿到的远端 IP
         String targetIp;
         if (selfId.equals(hostId)) {
             targetIp = "localhost";
         } else {
             targetIp = nodeIpMap.get(hostId);
             if (targetIp == null) {
-                return; // 还没收到该 Host 的报文，等下个 tick
+                return;
             }
         }
         String url = "http://" + targetIp + ":" + serverPort + "/";
@@ -152,7 +153,6 @@ public class DiscoveryService implements DisposableBean {
     }
 
     private boolean openBrowser(String url) {
-        // 1) 优先用 Desktop API
         try {
             if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
                 Desktop.getDesktop().browse(new URI(url));
@@ -161,7 +161,6 @@ public class DiscoveryService implements DisposableBean {
         } catch (Exception e) {
             log.debug("[Discovery] Desktop.browse failed: {}", e.getMessage());
         }
-        // 2) 退化到平台命令
         try {
             String os = System.getProperty("os.name", "").toLowerCase();
             ProcessBuilder pb;
@@ -191,18 +190,39 @@ public class DiscoveryService implements DisposableBean {
                 if (!msg.isHello() || msg.getId() == null) {
                     continue;
                 }
-                // 自己的回环报文不计入映射，但仍交给 elector（elector 内部会过滤 selfId）
                 String senderIp = packet.getAddress().getHostAddress();
                 if (!msg.getId().equals(NodeIdGenerator.getNodeId())) {
                     nodeIpMap.put(msg.getId(), senderIp);
+                    if (msg.getHostname() != null) {
+                        ipHostnameMap.put(senderIp, msg.getHostname());
+                    }
                 }
-                elector.onPeer(msg.getId(), msg.getVersion());
+                elector.onPeer(msg.getId(), msg.getVersion(), msg.isHost(), msg.getHostname());
             } catch (Exception e) {
                 if (running.get() && !socket.isClosed()) {
                     log.warn("[Discovery] receive error: {}", e.getMessage());
                 }
             }
         }
+    }
+
+    /** Bug 10：通过 IP 查 hostname（让 host 知道客户端的系统名）。 */
+    public String hostnameByIp(String ip) {
+        if (ip == null) return null;
+        // 自身 IP → 返回本机 hostname
+        if (ip.equals(NodeIdGenerator.getNodeId())) {
+            return NodeIdGenerator.getHostname();
+        }
+        return ipHostnameMap.get(ip);
+    }
+
+    /** 当前已知活跃节点 IP 集合（含 self），供玩家清理。 */
+    public java.util.Set<String> knownIps() {
+        java.util.Set<String> set = new java.util.HashSet<>(nodeIpMap.values());
+        set.add(NodeIdGenerator.getNodeId());
+        // loopback 客户端也算 host 自身
+        set.add("127.0.0.1");
+        return set;
     }
 
     private NetworkInterface pickInterface() throws SocketException {
