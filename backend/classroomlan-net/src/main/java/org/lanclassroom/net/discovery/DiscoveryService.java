@@ -302,6 +302,14 @@ public class DiscoveryService implements DisposableBean {
 
     @Override
     public void destroy() {
+        // 如果本节点是 Host，主动退位，触发其他节点快速重新选举
+        if (elector.isHost()) {
+            elector.resign();
+        }
+        running.set(false);
+        if (scheduler != null) {
+            scheduler.shutdownNow();
+        }
         running.set(false);
         if (scheduler != null) {
             scheduler.shutdownNow();

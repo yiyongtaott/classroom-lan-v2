@@ -18,6 +18,9 @@ public class HostElector {
     private final Map<String, PeerInfo> peers = new ConcurrentHashMap<>();
     private volatile boolean selfHostBelief = false;
 
+    /** 当前集群公认的 Host（即上次选举的获胜者），用于稳定性保证 */
+    private volatile String currentHostId = null;
+
     private final List<HostChangeListener> listeners = new CopyOnWriteArrayList<>();
 
     public interface HostChangeListener {
@@ -45,15 +48,35 @@ public class HostElector {
         onPeer(peerId, peerVersion, false, null);
     }
 
+    /**
+     * 主动退位：当前 Host 节点退出时调用，清空 currentHostId 并重新选举。
+     * 一般由 DiscoveryService.destroy() 触发。
+     */
+    public void resign() {
+        if (selfId.equals(currentHostId)) {
+            currentHostId = null;
+            // 触发一次选举，会选出新的 Host
+            electHost();
+        }
+    }
+
     public String electHost() {
         long now = clock.getAsLong();
+        // 1. 清理超时节点
         peers.entrySet().removeIf(e -> now - e.getValue().lastSeenMs > peerTtlMs);
 
-        Comparator<PeerInfo> cmp = Comparator
-                .comparing((PeerInfo p) -> p.isHost ? 0 : 1)
-                .thenComparing(p -> p.version, Comparator.reverseOrder())
-                .thenComparing(p -> p.id);
+        // 2. 如果已有 currentHostId 且该节点仍然存活，则保持不变
+        if (currentHostId != null && isAlive(currentHostId, now)) {
+            boolean newBelief = selfId.equals(currentHostId);
+            if (newBelief != selfHostBelief) {
+                selfHostBelief = newBelief;
+                notifyListeners(newBelief, currentHostId);
+            }
+            return currentHostId;
+        }
 
+        // 3. 否则重新选举：存活节点中 ID 最小的
+        Comparator<PeerInfo> cmp = Comparator.comparing(p -> p.id);
         PeerInfo winner = new PeerInfo(selfId, selfVersion, selfHostBelief, null, now);
         for (Map.Entry<String, PeerInfo> e : peers.entrySet()) {
             PeerInfo candidate = e.getValue();
@@ -61,22 +84,42 @@ public class HostElector {
                 winner = candidate;
             }
         }
+        String newHostId = winner.id;
 
-        boolean newBelief = selfId.equals(winner.id);
-        if (newBelief != selfHostBelief) {
+        // 4. 更新 currentHostId 并通知
+        if (!newHostId.equals(currentHostId)) {
+            currentHostId = newHostId;
+            boolean newBelief = selfId.equals(newHostId);
             selfHostBelief = newBelief;
-            notifyListeners(newBelief, winner.id);
+            notifyListeners(newBelief, newHostId);
+        } else {
+            // 即使 ID 没变，也要更新 selfHostBelief（可能之前是不一致）
+            boolean newBelief = selfId.equals(newHostId);
+            if (newBelief != selfHostBelief) {
+                selfHostBelief = newBelief;
+                notifyListeners(newBelief, newHostId);
+            }
         }
-        return winner.id;
+        return newHostId;
     }
 
     public boolean isHost() {
         return selfId.equals(electHost());
     }
 
-    /** 启动时强制重选举并通知（确保一上线就广播当前 host 状态） */
+    /** 启动时强制重新选举，确保本节点状态正确 */
     public void forceReelectAndNotify() {
         electHost();
+    }
+
+    // 判断指定节点是否存活
+    private boolean isAlive(String nodeId, long now) {
+        if (selfId.equals(nodeId)) {
+            // 自己永远认为自己是存活的（只要进程在）
+            return true;
+        }
+        PeerInfo info = peers.get(nodeId);
+        return info != null && (now - info.lastSeenMs <= peerTtlMs);
     }
 
     public String getSelfId() { return selfId; }
