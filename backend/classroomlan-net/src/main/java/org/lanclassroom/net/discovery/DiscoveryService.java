@@ -34,7 +34,9 @@ public class DiscoveryService implements DisposableBean {
     public static final String VERSION = "v2";
     private final SimpMessagingTemplate messaging;
     private final Room room;
-
+    // 用于 performElection 收集回复的 Host
+    private final Set<String> candidateHosts = ConcurrentHashMap.newKeySet();
+    private boolean electionActive = false; // 标记是否正在进行选举
     @Value("${app.udp.multicast-group:230.0.0.1}")
     private String groupAddress;
 
@@ -52,7 +54,8 @@ public class DiscoveryService implements DisposableBean {
 
     private final HostElector elector;
     private final ObjectProvider<UserStatusService> userStatusProvider;
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = new ObjectMapper()
+            .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
 
     private final Map<String, String> nodeIpMap = new ConcurrentHashMap<>();
     private final Map<String, String> ipHostnameMap = new ConcurrentHashMap<>();
@@ -112,33 +115,22 @@ public class DiscoveryService implements DisposableBean {
     // ---------- 选举协议 ----------
     private void performElection() {
         try {
-            // 1. 发送 HOST_QUERY
+            candidateHosts.clear();
+            electionActive = true;
+            // 发送 HOST_QUERY
             DiscoveryMessage query = DiscoveryMessage.hostQuery(NodeIdGenerator.getNodeId());
             byte[] data = mapper.writeValueAsBytes(query);
             socket.send(new DatagramPacket(data, data.length, group, port));
+            log.info("[Election] sent HOST_QUERY");
 
-            // 2. 等待 500ms 收集 HOST_REPLY
-            long deadline = System.currentTimeMillis() + 500;
+            // 等待 500ms，让 receiveLoop 收集 HOST_REPLY
+            Thread.sleep(500);
+            electionActive = false;
+
             String bestHost = null;
-            byte[] buf = new byte[8192];
-            int oldTimeout = socket.getSoTimeout();
-            socket.setSoTimeout(100);
-            while (System.currentTimeMillis() < deadline) {
-                try {
-                    DatagramPacket packet = new DatagramPacket(buf, buf.length);
-                    socket.receive(packet);
-                    DiscoveryMessage msg = mapper.readValue(
-                            new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8),
-                            DiscoveryMessage.class);
-                    if (msg != null && msg.getType() == DiscoveryMessage.Type.HOST_REPLY
-                            && msg.getHostId() != null) {
-                        if (bestHost == null || msg.getHostId().compareTo(bestHost) < 0) {
-                            bestHost = msg.getHostId();
-                        }
-                    }
-                } catch (SocketTimeoutException ignored) {}
+            if (!candidateHosts.isEmpty()) {
+                bestHost = candidateHosts.stream().min(String::compareTo).orElse(null);
             }
-            socket.setSoTimeout(oldTimeout);
 
             if (bestHost != null) {
                 elector.setHost(bestHost);
@@ -151,6 +143,9 @@ public class DiscoveryService implements DisposableBean {
         } catch (Exception e) {
             log.warn("[Election] fallback to self", e);
             elector.setHost(NodeIdGenerator.getNodeId());
+        } finally {
+            electionActive = false;
+            candidateHosts.clear();
         }
     }
 
@@ -272,7 +267,9 @@ public class DiscoveryService implements DisposableBean {
                         handleHostQuery(msg);
                         break;
                     case HOST_REPLY:
-                        // 只在 performElection 中处理，此处忽略
+                        if (electionActive && msg.getHostId() != null) {
+                            candidateHosts.add(msg.getHostId());
+                        }
                         break;
                     case HOST_CLAIM:
                         handleHostClaim(msg, senderIp);
