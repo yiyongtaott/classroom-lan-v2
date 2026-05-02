@@ -2,6 +2,8 @@ package org.lanclassroom.net.discovery;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
+import lombok.Data;
+import lombok.RequiredArgsConstructor;
 import org.lanclassroom.core.model.Player;
 import org.lanclassroom.core.model.Room;
 import org.lanclassroom.core.util.NodeIdGenerator;
@@ -16,33 +18,16 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.awt.Desktop;
-import java.net.DatagramPacket;
-import java.net.Inet4Address;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.MulticastSocket;
-import java.net.NetworkInterface;
-import java.net.SocketException;
-import java.net.URI;
+import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.Enumeration;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * UDP 组播发现服务。
- * 职责：
- * 1. 启动时 join multicast group
- * 2. 每 2s 广播一次 HELLO（携带 nodeId / version / 当前 host 信仰 / hostname）
- * 3. 接收回路解析 HELLO → 更新 HostElector + 维护 ip↔node 关联表 + UDP 心跳计入 UserStatusService
- * 4. 周期判断：本机非 Host 时自动打开浏览器跳到 Host 的前端页面
- */
 @Service
+@Data
+@RequiredArgsConstructor
 public class DiscoveryService implements DisposableBean {
 
     public static final Logger log = LoggerFactory.getLogger(DiscoveryService.class);
@@ -66,18 +51,10 @@ public class DiscoveryService implements DisposableBean {
     private boolean autoOpenBrowser;
 
     private final HostElector elector;
-    /**
-     * 用 ObjectProvider 避免与 UserStatusService 之间的循环依赖。
-     */
     private final ObjectProvider<UserStatusService> userStatusProvider;
     private final ObjectMapper mapper = new ObjectMapper();
-    /**
-     * nodeId → 该节点的源 IP（用于打开 Host 前端页面）。
-     */
+
     private final Map<String, String> nodeIpMap = new ConcurrentHashMap<>();
-    /**
-     * IP → 该节点的 hostname（Bug 10：用于在 host 端展示客户端的系统名）。
-     */
     private final Map<String, String> ipHostnameMap = new ConcurrentHashMap<>();
 
     private volatile String openedForHostId = null;
@@ -88,13 +65,6 @@ public class DiscoveryService implements DisposableBean {
     private ScheduledExecutorService scheduler;
     private Thread receiverThread;
     private final AtomicBoolean running = new AtomicBoolean(false);
-
-    public DiscoveryService(HostElector elector, ObjectProvider<UserStatusService> userStatusProvider, Room room,SimpMessagingTemplate messaging) {
-        this.elector = elector;
-        this.userStatusProvider = userStatusProvider;
-        this.room = room;
-        this.messaging = messaging;
-    }
 
     @PostConstruct
     public void start() throws Exception {
@@ -123,7 +93,8 @@ public class DiscoveryService implements DisposableBean {
                 networkInterface != null ? networkInterface.getName() : "default",
                 NodeIdGenerator.getNodeId(),
                 serverPort);
-        // 注册 Host 变更监听器，实时通知所有客户端
+
+        // 注册 Host 变更监听器
         elector.addListener((isHost, hostId) -> {
             Map<String, Object> msg = Map.of(
                     "type", "HOST_CHANGED",
@@ -133,13 +104,79 @@ public class DiscoveryService implements DisposableBean {
             messaging.convertAndSend("/topic/host", msg);
             log.info("[Discovery] broadcasted HOST_CHANGED: newHost={}, isSelf={}", hostId, isHost);
         });
-        // 启动后立即触发一次重选举并广播自身状态
-        elector.forceReelectAndNotify();
+
+        // 启动快速选举
+        performElection();
     }
 
+    // ---------- 选举协议 ----------
+    private void performElection() {
+        try {
+            // 1. 发送 HOST_QUERY
+            DiscoveryMessage query = DiscoveryMessage.hostQuery(NodeIdGenerator.getNodeId());
+            byte[] data = mapper.writeValueAsBytes(query);
+            socket.send(new DatagramPacket(data, data.length, group, port));
+
+            // 2. 等待 500ms 收集 HOST_REPLY
+            long deadline = System.currentTimeMillis() + 500;
+            String bestHost = null;
+            byte[] buf = new byte[8192];
+            int oldTimeout = socket.getSoTimeout();
+            socket.setSoTimeout(100);
+            while (System.currentTimeMillis() < deadline) {
+                try {
+                    DatagramPacket packet = new DatagramPacket(buf, buf.length);
+                    socket.receive(packet);
+                    DiscoveryMessage msg = mapper.readValue(
+                            new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8),
+                            DiscoveryMessage.class);
+                    if (msg != null && msg.getType() == DiscoveryMessage.Type.HOST_REPLY
+                            && msg.getHostId() != null) {
+                        if (bestHost == null || msg.getHostId().compareTo(bestHost) < 0) {
+                            bestHost = msg.getHostId();
+                        }
+                    }
+                } catch (SocketTimeoutException ignored) {}
+            }
+            socket.setSoTimeout(oldTimeout);
+
+            if (bestHost != null) {
+                elector.setHost(bestHost);
+                log.info("[Election] discovered existing Host: {}", bestHost);
+            } else {
+                elector.setHost(NodeIdGenerator.getNodeId());
+                broadcastHostClaim(NodeIdGenerator.getNodeId());
+                log.info("[Election] no Host replied, claiming myself as Host");
+            }
+        } catch (Exception e) {
+            log.warn("[Election] fallback to self", e);
+            elector.setHost(NodeIdGenerator.getNodeId());
+        }
+    }
+
+    private void broadcastHostClaim(String hostId) {
+        DiscoveryMessage msg = DiscoveryMessage.hostClaim(NodeIdGenerator.getNodeId(), hostId);
+        try {
+            byte[] data = mapper.writeValueAsBytes(msg);
+            socket.send(new DatagramPacket(data, data.length, group, port));
+        } catch (Exception e) {
+            log.warn("[Discovery] failed to send HOST_CLAIM: {}", e.getMessage());
+        }
+    }
+
+    private void sendHostReply(String targetHostId) {
+        DiscoveryMessage reply = DiscoveryMessage.hostReply(NodeIdGenerator.getNodeId(), targetHostId);
+        try {
+            byte[] data = mapper.writeValueAsBytes(reply);
+            socket.send(new DatagramPacket(data, data.length, group, port));
+        } catch (Exception e) {
+            log.warn("[Discovery] failed to send HOST_REPLY: {}", e.getMessage());
+        }
+    }
+
+    // ---------- 定期任务 ----------
     private void tick() {
         sendHello();
-        // 自身 UDP 心跳也写入 UserStatusService（让 host 也有第一圆）
         UserStatusService userStatus = userStatusProvider.getIfAvailable();
         if (userStatus != null) {
             String selfIp = NodeIdGenerator.getNodeId();
@@ -169,22 +206,17 @@ public class DiscoveryService implements DisposableBean {
         }
     }
 
-
     private void maybeOpenHostPage() {
         String selfId = NodeIdGenerator.getNodeId();
-        String hostId = elector.electHost();
+        String hostId = elector.getHostId();
+        if (hostId == null || hostId.equals(openedForHostId)) return;
 
-        if (hostId.equals(openedForHostId)) {
-            return;
-        }
         String targetIp;
         if (selfId.equals(hostId)) {
             targetIp = "localhost";
         } else {
             targetIp = nodeIpMap.get(hostId);
-            if (targetIp == null) {
-                return;
-            }
+            if (targetIp == null) return;
         }
         String url = "http://" + targetIp + ":" + serverPort + "/";
         if (openBrowser(url)) {
@@ -220,6 +252,7 @@ public class DiscoveryService implements DisposableBean {
         }
     }
 
+    // ---------- 接收循环 ----------
     private void receiveLoop() {
         byte[] buffer = new byte[8192];
         while (running.get() && !socket.isClosed()) {
@@ -228,25 +261,22 @@ public class DiscoveryService implements DisposableBean {
                 socket.receive(packet);
                 String json = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8);
                 DiscoveryMessage msg = mapper.readValue(json, DiscoveryMessage.class);
-                if (!msg.isHello() || msg.getId() == null) {
-                    continue;
-                }
+                if (msg == null || msg.getId() == null) continue;
                 String senderIp = packet.getAddress().getHostAddress();
-                if (!msg.getId().equals(NodeIdGenerator.getNodeId())) {
-                    nodeIpMap.put(msg.getId(), senderIp);
-                    if (msg.getHostname() != null) {
-                        ipHostnameMap.put(senderIp, msg.getHostname());
-                    }
-                }
-                elector.onPeer(msg.getId(), msg.getVersion(), msg.isHost(), msg.getHostname());
 
-                // 任务 3 状态一：UDP 心跳计入
-                UserStatusService userStatus = userStatusProvider.getIfAvailable();
-                if (userStatus != null) {
-                    String uuid = room.findByIp(senderIp).map(Player::getId).orElse(null);
-                    if (uuid != null) {
-                        userStatus.updateUdpHeartbeat(uuid, Instant.now());
-                    }
+                switch (msg.getType()) {
+                    case HELLO:
+                        handleHello(msg, senderIp);
+                        break;
+                    case HOST_QUERY:
+                        handleHostQuery(msg);
+                        break;
+                    case HOST_REPLY:
+                        // 只在 performElection 中处理，此处忽略
+                        break;
+                    case HOST_CLAIM:
+                        handleHostClaim(msg, senderIp);
+                        break;
                 }
             } catch (Exception e) {
                 if (running.get() && !socket.isClosed()) {
@@ -256,25 +286,62 @@ public class DiscoveryService implements DisposableBean {
         }
     }
 
-    /**
-     * Bug 10：通过 IP 查 hostname（让 host 知道客户端的系统名）。
-     */
+    private void handleHello(DiscoveryMessage msg, String senderIp) {
+        if (msg.getId().equals(NodeIdGenerator.getNodeId())) return;
+
+        nodeIpMap.put(msg.getId(), senderIp);
+        if (msg.getHostname() != null) {
+            ipHostnameMap.put(senderIp, msg.getHostname());
+        }
+        elector.onPeer(msg.getId(), msg.getVersion(), msg.isHost(), msg.getHostname());
+
+        UserStatusService userStatus = userStatusProvider.getIfAvailable();
+        if (userStatus != null) {
+            String uuid = room.findByIp(senderIp).map(Player::getId).orElse(null);
+            if (uuid != null) {
+                userStatus.updateUdpHeartbeat(uuid, Instant.now());
+            }
+        }
+    }
+
+    private void handleHostQuery(DiscoveryMessage msg) {
+        String currentHost = elector.getHostId();
+        if (currentHost != null) {
+            sendHostReply(currentHost);
+        }
+    }
+
+    private void handleHostClaim(DiscoveryMessage msg, String senderIp) {
+        String claimedHost = msg.getHostId();
+        if (claimedHost == null) return;
+
+        String selfId = NodeIdGenerator.getNodeId();
+        if (elector.getHostId() == null) {
+            elector.setHost(claimedHost);
+        } else if (elector.isHost()) {
+            if (claimedHost.compareTo(selfId) < 0) {
+                elector.setHost(claimedHost);
+                broadcastHostClaim(claimedHost);
+            }
+        } else {
+            if (claimedHost.compareTo(elector.getHostId()) < 0) {
+                elector.setHost(claimedHost);
+            }
+        }
+    }
+
+    // ---------- 工具方法 ----------
     public String hostnameByIp(String ip) {
         if (ip == null) return null;
-        // 自身 IP → 返回本机 hostname
         if (ip.equals(NodeIdGenerator.getNodeId())) {
             return NodeIdGenerator.getHostname();
         }
         return ipHostnameMap.get(ip);
     }
 
-    /**
-     * 当前已知活跃节点 IP 集合（含 self），供玩家清理。
-     */
-    public java.util.Set<String> knownIps() {
-        java.util.Set<String> set = new java.util.HashSet<>(nodeIpMap.values());
+    public Set<String> knownIps() {
+        Set<String> set = new HashSet<>(nodeIpMap.values());
         set.add(NodeIdGenerator.getNodeId());
-        // loopback 客户端也算 host 自身
         set.add("127.0.0.1");
         return set;
     }
@@ -293,22 +360,15 @@ public class DiscoveryService implements DisposableBean {
                     return ni;
                 }
             }
-            if (fallback == null) {
-                fallback = ni;
-            }
+            if (fallback == null) fallback = ni;
         }
         return fallback;
     }
 
     @Override
     public void destroy() {
-        // 如果本节点是 Host，主动退位，触发其他节点快速重新选举
         if (elector.isHost()) {
-            elector.resign();
-        }
-        running.set(false);
-        if (scheduler != null) {
-            scheduler.shutdownNow();
+            broadcastHostClaim(null); // 退位广播
         }
         running.set(false);
         if (scheduler != null) {
@@ -317,8 +377,7 @@ public class DiscoveryService implements DisposableBean {
         if (socket != null && !socket.isClosed()) {
             try {
                 socket.leaveGroup(new InetSocketAddress(group, port), networkInterface);
-            } catch (Exception ignored) {
-            }
+            } catch (Exception ignored) {}
             socket.close();
         }
         if (receiverThread != null) {

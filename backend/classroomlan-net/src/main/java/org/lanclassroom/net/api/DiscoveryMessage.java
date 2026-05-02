@@ -1,84 +1,67 @@
 package org.lanclassroom.net.api;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Data;
 
-/**
- * UDP 发现报文 - HELLO（业务文档 §4.1 + 选主修复扩展）。
- * <pre>
- * { "type":"HELLO", "id":"nodeId", "version":"v2",
- *   "host":true,            // 发送者当前是否自认 Host（用于消除争抢）
- *   "hostname":"DESKTOP-X"  // 发送者主机名（便于客户端展示）
- * }
- * </pre>
- */
+import java.time.Instant;
+@Data
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class DiscoveryMessage {
+    public enum Type {
+        HELLO,
+        HOST_QUERY,      // 询问“谁是 Host？”
+        HOST_REPLY,      // 回复“当前 Host 是 …”
+        HOST_CLAIM       // 宣布“我是 Host”或“降级，Host 是 …”
+    }
 
-    public static final String TYPE_HELLO = "HELLO";
-
-    @JsonProperty("type")
-    private String type;
-
-    @JsonProperty("id")
+    private Type type;
     private String id;
-
-    @JsonProperty("version")
     private String version;
-
-    /** 发送者当前是否自认为 Host。该字段使收敛比纯 (version, id) 排序更"惯性"。 */
-    @JsonProperty("host")
-    private boolean host;
-
-    @JsonProperty("hostname")
+    private boolean host;       // 仅 HELLO 有用
     private String hostname;
-
-    @JsonProperty("timestamp")
-    private long timestamp;
+    private String hostId;      // 用于 HOST_REPLY / HOST_CLAIM
+    private Instant timestamp;
 
     public DiscoveryMessage() {}
 
-    public DiscoveryMessage(String type, String id, String version) {
-        this.type = type;
-        this.id = id;
-        this.version = version;
-        this.timestamp = System.currentTimeMillis();
-    }
-
-    public static DiscoveryMessage hello(String id, String version, boolean isHost, String hostname) {
-        DiscoveryMessage m = new DiscoveryMessage(TYPE_HELLO, id, version);
-        m.host = isHost;
+    // 原有工厂方法
+    public static DiscoveryMessage hello(String id, String version, boolean host, String hostname) {
+        DiscoveryMessage m = new DiscoveryMessage();
+        m.type = Type.HELLO;
+        m.id = id;
+        m.version = version;
+        m.host = host;
         m.hostname = hostname;
+        m.timestamp = Instant.now();
         return m;
     }
 
-    @JsonIgnore
-    public boolean isHello() {
-        return TYPE_HELLO.equals(type);
+    // 新增工厂方法
+    public static DiscoveryMessage hostQuery(String id) {
+        DiscoveryMessage m = new DiscoveryMessage();
+        m.type = Type.HOST_QUERY;
+        m.id = id;
+        m.timestamp = Instant.now();
+        return m;
     }
 
-    public String getType() { return type; }
-    public DiscoveryMessage setType(String type) { this.type = type; return this; }
-
-    public String getId() { return id; }
-    public DiscoveryMessage setId(String id) { this.id = id; return this; }
-
-    public String getVersion() { return version; }
-    public DiscoveryMessage setVersion(String version) { this.version = version; return this; }
-
-    public boolean isHost() { return host; }
-    public DiscoveryMessage setHost(boolean host) { this.host = host; return this; }
-
-    public String getHostname() { return hostname; }
-    public DiscoveryMessage setHostname(String hostname) { this.hostname = hostname; return this; }
-
-    public long getTimestamp() { return timestamp; }
-    public DiscoveryMessage setTimestamp(long timestamp) { this.timestamp = timestamp; return this; }
-
-    @Override
-    public String toString() {
-        return "DiscoveryMessage{type='" + type + "', id='" + id + "', version='" + version
-                + "', host=" + host + ", hostname='" + hostname + "'}";
+    public static DiscoveryMessage hostReply(String id, String hostId) {
+        DiscoveryMessage m = new DiscoveryMessage();
+        m.type = Type.HOST_REPLY;
+        m.id = id;
+        m.hostId = hostId;
+        m.timestamp = Instant.now();
+        return m;
     }
+
+    public static DiscoveryMessage hostClaim(String id, String hostId) {
+        DiscoveryMessage m = new DiscoveryMessage();
+        m.type = Type.HOST_CLAIM;
+        m.id = id;
+        m.hostId = hostId;
+        m.timestamp = Instant.now();
+        return m;
+    }
+
+    public boolean isHello() { return type == Type.HELLO; }
 }
