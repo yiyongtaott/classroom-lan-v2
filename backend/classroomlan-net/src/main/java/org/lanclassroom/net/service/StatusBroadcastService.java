@@ -60,7 +60,7 @@ public class StatusBroadcastService {
         result.put("nodeId", accessorIsHost ? hostIp : accessorIp);
         result.put("hostname", accessorHostname);
         result.put("host", accessorIsHost);
-        result.put("hostNodeId", elector.electHost());
+        result.put("hostNodeId", elector.getHostId());
         result.put("hostHostname", NodeIdGenerator.getHostname());
         result.put("peerCount", elector.peerCount());
         result.put("playerCount", room.getPlayers().size());
@@ -69,9 +69,9 @@ public class StatusBroadcastService {
     }
 
     public Map<String, Object> buildRoomSnapshot() {
-        room.setHostNodeId(elector.electHost());
+        room.setHostNodeId(elector.getHostId());
         Map<String, Object> snap = new HashMap<>();
-        snap.put("hostNodeId", elector.electHost());
+        snap.put("hostNodeId", elector.getHostId());
         snap.put("gameType", room.getGameType());
         snap.put("players", List.copyOf(room.getPlayers()));
         snap.put("playerCount", room.getPlayers().size());
@@ -81,7 +81,7 @@ public class StatusBroadcastService {
     /** 广播全局 status（不带 accessorIp 视角，只广播 host/peer/playerCount 等共享字段）。 */
     public void broadcastStatus() {
         Map<String, Object> shared = new HashMap<>();
-        shared.put("hostNodeId", elector.electHost());
+        shared.put("hostNodeId", elector.getHostId());
         shared.put("hostHostname", NodeIdGenerator.getHostname());
         shared.put("peerCount", elector.peerCount());
         shared.put("playerCount", room.getPlayers().size());
@@ -89,7 +89,7 @@ public class StatusBroadcastService {
         messaging.convertAndSend(WebSocketConfig.TOPIC_STATUS, shared);
 
         // 检测 host 变更 → 通知所有客户端
-        String newHost = elector.electHost();
+        String newHost = elector.getHostId();
         String prev = lastHostId.getAndSet(newHost);
         if (!Objects.equals(prev, newHost) && !"".equals(prev)) {
             // host 变更通知

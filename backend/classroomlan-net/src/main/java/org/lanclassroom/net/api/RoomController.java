@@ -61,7 +61,7 @@ public class RoomController {
 
     @GetMapping("/room")
     public ResponseEntity<RoomSnapshot> snapshot() {
-        room.setHostNodeId(elector.electHost());
+        room.setHostNodeId(elector.getHostId());
         return ResponseEntity.ok(room.snapshot());
     }
 

@@ -69,6 +69,12 @@ public class HostElector {
         return selfHostBelief;
     }
 
+    public int peerCount() {
+        long now = clock.getAsLong();
+        peers.entrySet().removeIf(e -> now - e.getValue().lastSeenMs > peerTtlMs);
+        return peers.size();
+    }
+
     // 心跳超时清理，保留用于可能的后续状态判断
     public void cleanupExpiredPeers() {
         long now = clock.getAsLong();
