@@ -365,6 +365,10 @@ public class DiscoveryService implements DisposableBean {
 
     private void handleHostBye(DiscoveryMessage msg, String senderIp) {
         log.info("[发现服务] 收到死亡宣告 来自={}，主机已下线", senderIp);
+        if (msg.getId().equals(NodeIdGenerator.getNodeId())) {
+            log.info("[发现服务] 死亡IP是自己，孩子们，我回不来了");
+            return;
+        }
         // 立即删除已死亡主机的记录（如果有）
         elector.removePeer(msg.getId());
         // 重新选举
