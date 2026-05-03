@@ -30,7 +30,7 @@ public class IpHandshakeInterceptor implements HandshakeInterceptor {
                                    WebSocketHandler wsHandler, Map<String, Object> attributes) {
         String ip = resolveIp(request);
         attributes.put(ATTR_CLIENT_IP, ip);
-        log.debug("[Handshake] clientIp={}", ip);
+//        log.debug("[Handshake] clientIp={}", ip);
         return true;
     }
 

@@ -43,7 +43,7 @@ export function useWebSocket() {
   function track(unsub) { if (unsub) unsubs.push(unsub) }
 
   function reportPageActive() {
-    console.log('stomp.connected.value:'+stomp.connected.value)
+    // console.log('stomp.connected.value:'+stomp.connected.value)
     if (!stomp.connected.value) return
     const active = document.visibilityState === 'visible'
     stomp.publish(APP.PAGE_ACTIVE, { active })
@@ -54,10 +54,10 @@ export function useWebSocket() {
   }
 
   function setupSubscriptions() {
-    console.log('setupSubscriptions')
+    // console.log('setupSubscriptions')
     // 初始快照（每次重连都重新订阅，服务端在 SessionConnectedEvent 时单播一次）
     track(stomp.subscribe(QUEUE.INIT, (snap) => {
-      console.log('[INIT] 完整快照:', JSON.stringify(snap))
+      // console.log('[INIT] 完整快照:', JSON.stringify(snap))
       if (!snap) return
       if (snap.status) appStore.applyStatus(snap.status)
       if (snap.room) {

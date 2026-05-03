@@ -172,6 +172,8 @@ export const useRoomStore = defineStore('room', () => {
     if (gameLog.value.length > 200) gameLog.value.shift()
     if (state && state.gameType) gameType.value = state.gameType
     if (state && (state.stage === 'STOPPED' || state.stage === 'GAME_OVER')) {
+      // 关键修复：在游戏停止或结束时，重置 gameType
+      gameType.value = null;
       // 游戏结束 → 清空画板缓存
       drawStrokes.value = []
       drawPrivate.value = null

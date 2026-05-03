@@ -61,7 +61,7 @@ public class PlayerController {
         if (ip == null) return;
         Player p = room.findByIp(ip).orElse(null);
         if (p == null) return;
-        log.info("[PAGE_ACTIVE] playerId={} active={} 写入后 status={}", p.getId(), active, userStatus);
+//        log.info("[PAGE_ACTIVE] playerId={} active={} 写入后 status={}", p.getId(), active, userStatus);
         userStatus.setPageActive(p.getId(), (Boolean) active);
     }
 }

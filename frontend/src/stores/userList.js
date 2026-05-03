@@ -56,7 +56,7 @@ export const useUserListStore = defineStore('userList', () => {
 
   /** 三状态圆点（任务 3）。 */
   function updateStatus(payload) {
-    console.log(payload)
+    // console.log('payload'+payload)
     if (!payload || !payload.userId) return
     // userId 在后端是 player.id（注意：UserStatusService 的 record.userId 也存的是 player.id）
     const u = users.value.find(x => x.id === payload.userId)
@@ -68,20 +68,20 @@ export const useUserListStore = defineStore('userList', () => {
 
   /** init 快照中的 userStatuses（playerId → record）。 */
   function applyStatusMap(map) {
-    console.log('applyStatusMap')
+    // console.log('applyStatusMap')
     if (!map) return
-    console.log('[applyStatusMap] 入参 keys:', Object.keys(map))
-    console.log('[applyStatusMap] 当前 users ids:', users.value.map(u => u.id))
+    // console.log('[applyStatusMap] 入参 keys:', Object.keys(map))
+    // console.log('[applyStatusMap] 当前 users ids:', users.value.map(u => u.id))
     for (const id of Object.keys(map)) {
       const r = map[id]
       const u = users.value.find(x => x.id === id)
-      console.log(`[applyStatusMap] 处理 ${id}, 在 users 中找到: ${!!u}`)
+      // console.log(`[applyStatusMap] 处理 ${id}, 在 users 中找到: ${!!u}`)
       if (!u) continue
       u.backendAlive = !!r.backendAlive
       u.wsAlive = !!r.wsAlive
       u.pageActive = !!r.pageActive
     }
-    console.log('applyStatusMap 后的用户列表:', toRaw(users.value))
+    // console.log('applyStatusMap 后的用户列表:', toRaw(users.value))
   }
 
   function find(id) { return users.value.find(u => u.id === id) }

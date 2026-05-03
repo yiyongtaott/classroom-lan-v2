@@ -25,7 +25,7 @@
           <dt>Host IP</dt><dd>{{ appStore.hostNodeId || '—' }}</dd>
           <dt>已发现节点</dt><dd>{{ appStore.peerCount }}</dd>
           <dt>玩家数</dt><dd>{{ userList.users.length }}</dd>
-          <dt>当前游戏</dt><dd>{{ appStore.gameType || '空闲' }}</dd>
+          <dt>当前游戏</dt><dd>{{ roomStore.gameType || '空闲' }}</dd>
         </dl>
         <div class="actions" v-if="!roomStore.hasJoined">
           <router-link to="/join" class="btn primary">加入房间</router-link>

@@ -1,312 +1,194 @@
 [ {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "STARTED",
-  "data" : {
-    "range" : "1-100"
-  },
-  "playerCount" : 2,
-  "ts" : 1777692144965
-}, {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "STOPPED",
-  "data" : {
-    "rounds" : 0
-  },
-  "playerCount" : 2,
-  "ts" : 1777692154101
-}, {
   "gameType" : "DRAW",
   "stage" : "SELECTING",
   "data" : {
-    "drawerId" : "c0c033b4-29be-4844-9a6c-36c72330479c",
-    "drawerName" : "电脑v111"
-  },
-  "ts" : 1777706986743
-}, {
-  "gameType" : "DRAW",
-  "stage" : "GAME_OVER",
-  "data" : {
-    "scores" : {
-      "c0c033b4-29be-4844-9a6c-36c72330479c" : 0,
-      "936ef37e-f5dd-4a46-a00d-f118ce0e6bac" : 0
-    }
-  },
-  "ts" : 1777707032271
-}, {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "STARTED",
-  "data" : {
-    "range" : "1-100"
-  },
-  "playerCount" : 2,
-  "ts" : 1777707179044
-}, {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "LOW",
-  "data" : {
-    "playerId" : "c0c033b4-29be-4844-9a6c-36c72330479c",
-    "playerName" : "电脑v111",
-    "rounds" : 1,
-    "value" : 50
-  },
-  "playerCount" : 2,
-  "ts" : 1777707187122
-}, {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "HIGH",
-  "data" : {
-    "playerId" : "936ef37e-f5dd-4a46-a00d-f118ce0e6bac",
-    "playerName" : "笔记本v123",
-    "rounds" : 2,
-    "value" : 90
-  },
-  "playerCount" : 2,
-  "ts" : 1777707192244
-}, {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "HIGH",
-  "data" : {
-    "playerId" : "c0c033b4-29be-4844-9a6c-36c72330479c",
-    "playerName" : "电脑v111",
-    "rounds" : 3,
-    "value" : 80
-  },
-  "playerCount" : 2,
-  "ts" : 1777707198551
-}, {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "HIGH",
-  "data" : {
-    "playerId" : "c0c033b4-29be-4844-9a6c-36c72330479c",
-    "playerName" : "电脑v111",
-    "rounds" : 4,
-    "value" : 80
-  },
-  "playerCount" : 2,
-  "ts" : 1777707199160
-}, {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "LOW",
-  "data" : {
-    "playerId" : "c0c033b4-29be-4844-9a6c-36c72330479c",
-    "playerName" : "电脑v111",
-    "rounds" : 5,
-    "value" : 60
-  },
-  "playerCount" : 2,
-  "ts" : 1777707203167
-}, {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "HIGH",
-  "data" : {
-    "playerId" : "c0c033b4-29be-4844-9a6c-36c72330479c",
-    "playerName" : "电脑v111",
-    "rounds" : 6,
-    "value" : 70
-  },
-  "playerCount" : 2,
-  "ts" : 1777707205534
-}, {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "WIN",
-  "data" : {
-    "playerId" : "c0c033b4-29be-4844-9a6c-36c72330479c",
-    "playerName" : "电脑v111",
-    "rounds" : 7,
-    "value" : 65
-  },
-  "playerCount" : 2,
-  "ts" : 1777707208966
-}, {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "STOPPED",
-  "data" : {
-    "rounds" : 7
-  },
-  "playerCount" : 2,
-  "ts" : 1777707212826
-}, {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "STARTED",
-  "data" : {
-    "range" : "1-100"
-  },
-  "playerCount" : 2,
-  "ts" : 1777707559834
-}, {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "STOPPED",
-  "data" : {
-    "rounds" : 0
-  },
-  "playerCount" : 2,
-  "ts" : 1777707561144
-}, {
-  "gameType" : "DRAW",
-  "stage" : "SELECTING",
-  "data" : {
-    "drawerId" : "c0c033b4-29be-4844-9a6c-36c72330479c",
-    "drawerName" : "电脑v111"
-  },
-  "ts" : 1777707573408
-}, {
-  "gameType" : "DRAW",
-  "stage" : "GAME_OVER",
-  "data" : {
-    "scores" : {
-      "c0c033b4-29be-4844-9a6c-36c72330479c" : 0,
-      "936ef37e-f5dd-4a46-a00d-f118ce0e6bac" : 0
-    }
-  },
-  "ts" : 1777707581825
-}, {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "STARTED",
-  "data" : {
-    "range" : "1-100"
-  },
-  "playerCount" : 1,
-  "ts" : 1777711936650
-}, {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "STOPPED",
-  "data" : {
-    "rounds" : 0
-  },
-  "playerCount" : 1,
-  "ts" : 1777711939731
-}, {
-  "gameType" : "DRAW",
-  "stage" : "SELECTING",
-  "data" : {
-    "drawerId" : "8115eb2e-7f01-4832-8a67-e189af173fdd",
+    "drawerId" : "8171f7bc-dc5f-4fba-a2fd-845c510683a0",
     "drawerName" : "flandretiamat"
   },
-  "ts" : 1777711942228
+  "ts" : 1777774319895
 }, {
   "gameType" : "DRAW",
   "stage" : "GAME_OVER",
   "data" : {
     "scores" : {
-      "8115eb2e-7f01-4832-8a67-e189af173fdd" : 0
+      "8171f7bc-dc5f-4fba-a2fd-845c510683a0" : 0
     }
   },
-  "ts" : 1777712115157
-}, {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "STARTED",
-  "data" : {
-    "range" : "1-100"
-  },
-  "playerCount" : 1,
-  "ts" : 1777712115158
-}, {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "STOPPED",
-  "data" : {
-    "rounds" : 0
-  },
-  "playerCount" : 1,
-  "ts" : 1777712116800
-}, {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "STARTED",
-  "data" : {
-    "range" : "1-100"
-  },
-  "playerCount" : 1,
-  "ts" : 1777719376197
-}, {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "STOPPED",
-  "data" : {
-    "rounds" : 0
-  },
-  "playerCount" : 1,
-  "ts" : 1777719377920
+  "ts" : 1777774585802
 }, {
   "gameType" : "DRAW",
   "stage" : "SELECTING",
   "data" : {
-    "drawerName" : "flandretiamat",
-    "drawerId" : "1b4fd386-d24b-4d22-bf57-47749ad69b6e"
-  },
-  "ts" : 1777719384063
-}, {
-  "gameType" : "DRAW",
-  "stage" : "GAME_OVER",
-  "data" : {
-    "scores" : {
-      "1b4fd386-d24b-4d22-bf57-47749ad69b6e" : 0
-    }
-  },
-  "ts" : 1777719394018
-}, {
-  "gameType" : "DRAW",
-  "stage" : "SELECTING",
-  "data" : {
-    "drawerName" : "flandretiamat",
-    "drawerId" : "1b4fd386-d24b-4d22-bf57-47749ad69b6e"
-  },
-  "ts" : 1777719401344
-}, {
-  "gameType" : "DRAW",
-  "stage" : "GAME_OVER",
-  "data" : {
-    "scores" : {
-      "1b4fd386-d24b-4d22-bf57-47749ad69b6e" : 0
-    }
-  },
-  "ts" : 1777719403457
-}, {
-  "gameType" : "DRAW",
-  "stage" : "SELECTING",
-  "data" : {
-    "drawerId" : "816d0151-3059-48ea-8dee-c30fd4781c6d",
+    "drawerId" : "8171f7bc-dc5f-4fba-a2fd-845c510683a0",
     "drawerName" : "flandretiamat"
   },
-  "ts" : 1777724236702
+  "ts" : 1777774586665
 }, {
   "gameType" : "DRAW",
   "stage" : "GAME_OVER",
   "data" : {
     "scores" : {
-      "816d0151-3059-48ea-8dee-c30fd4781c6d" : 0,
-      "d4211c01-493d-431a-a0d4-e08d17282c3a" : 0
+      "8171f7bc-dc5f-4fba-a2fd-845c510683a0" : 0
     }
   },
-  "ts" : 1777724241330
+  "ts" : 1777774598239
 }, {
   "gameType" : "DRAW",
   "stage" : "SELECTING",
   "data" : {
-    "drawerName" : "flandretiamat",
-    "drawerId" : "7b8979df-a680-456f-aed5-75f56744b62f"
+    "drawerId" : "8171f7bc-dc5f-4fba-a2fd-845c510683a0",
+    "drawerName" : "flandretiamat"
   },
-  "ts" : 1777725083299
+  "ts" : 1777774598741
 }, {
   "gameType" : "DRAW",
   "stage" : "GAME_OVER",
   "data" : {
     "scores" : {
-      "7b8979df-a680-456f-aed5-75f56744b62f" : 0
+      "8171f7bc-dc5f-4fba-a2fd-845c510683a0" : 0
     }
   },
-  "ts" : 1777725092838
+  "ts" : 1777774645273
 }, {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "STARTED",
+  "gameType" : "DRAW",
+  "stage" : "SELECTING",
   "data" : {
-    "range" : "1-100"
+    "drawerId" : "8171f7bc-dc5f-4fba-a2fd-845c510683a0",
+    "drawerName" : "flandretiamat"
   },
-  "playerCount" : 1,
-  "ts" : 1777725739867
+  "ts" : 1777774645860
 }, {
-  "gameType" : "NUMBER_GUESS",
-  "stage" : "STOPPED",
+  "gameType" : "DRAW",
+  "stage" : "GAME_OVER",
   "data" : {
-    "rounds" : 0
+    "scores" : {
+      "8171f7bc-dc5f-4fba-a2fd-845c510683a0" : 0
+    }
   },
-  "playerCount" : 1,
-  "ts" : 1777725752511
+  "ts" : 1777774649348
+}, {
+  "gameType" : "DRAW",
+  "stage" : "SELECTING",
+  "data" : {
+    "drawerId" : "8171f7bc-dc5f-4fba-a2fd-845c510683a0",
+    "drawerName" : "flandretiamat"
+  },
+  "ts" : 1777774651217
+}, {
+  "gameType" : "DRAW",
+  "stage" : "GAME_OVER",
+  "data" : {
+    "scores" : {
+      "8171f7bc-dc5f-4fba-a2fd-845c510683a0" : 0
+    }
+  },
+  "ts" : 1777774750892
+}, {
+  "gameType" : "DRAW",
+  "stage" : "SELECTING",
+  "data" : {
+    "drawerId" : "8171f7bc-dc5f-4fba-a2fd-845c510683a0",
+    "drawerName" : "flandretiamat"
+  },
+  "ts" : 1777774751615
+}, {
+  "gameType" : "DRAW",
+  "stage" : "GAME_OVER",
+  "data" : {
+    "scores" : {
+      "8171f7bc-dc5f-4fba-a2fd-845c510683a0" : 0
+    }
+  },
+  "ts" : 1777774753485
+}, {
+  "gameType" : "DRAW",
+  "stage" : "SELECTING",
+  "data" : {
+    "drawerId" : "8171f7bc-dc5f-4fba-a2fd-845c510683a0",
+    "drawerName" : "flandretiamat"
+  },
+  "ts" : 1777774753778
+}, {
+  "gameType" : "DRAW",
+  "stage" : "GAME_OVER",
+  "data" : {
+    "scores" : {
+      "8171f7bc-dc5f-4fba-a2fd-845c510683a0" : 0
+    }
+  },
+  "ts" : 1777774756535
+}, {
+  "gameType" : "DRAW",
+  "stage" : "SELECTING",
+  "data" : {
+    "drawerId" : "8171f7bc-dc5f-4fba-a2fd-845c510683a0",
+    "drawerName" : "flandretiamat"
+  },
+  "ts" : 1777774756933
+}, {
+  "gameType" : "DRAW",
+  "stage" : "GAME_OVER",
+  "data" : {
+    "scores" : {
+      "8171f7bc-dc5f-4fba-a2fd-845c510683a0" : 0
+    }
+  },
+  "ts" : 1777774878394
+}, {
+  "gameType" : "DRAW",
+  "stage" : "SELECTING",
+  "data" : {
+    "drawerId" : "8171f7bc-dc5f-4fba-a2fd-845c510683a0",
+    "drawerName" : "flandretiamat"
+  },
+  "ts" : 1777774878873
+}, {
+  "gameType" : "DRAW",
+  "stage" : "GAME_OVER",
+  "data" : {
+    "scores" : {
+      "8171f7bc-dc5f-4fba-a2fd-845c510683a0" : 0
+    }
+  },
+  "ts" : 1777774920461
+}, {
+  "gameType" : "DRAW",
+  "stage" : "SELECTING",
+  "data" : {
+    "drawerId" : "8171f7bc-dc5f-4fba-a2fd-845c510683a0",
+    "drawerName" : "flandretiamat"
+  },
+  "ts" : 1777774921154
+}, {
+  "gameType" : "DRAW",
+  "stage" : "ROUND_START",
+  "data" : {
+    "drawerId" : "8171f7bc-dc5f-4fba-a2fd-845c510683a0",
+    "drawerName" : "flandretiamat",
+    "wordLength" : 2,
+    "roundStartTs" : 1777774931354,
+    "roundEndTs" : 1777774991354
+  },
+  "ts" : 1777774931354
+}, {
+  "gameType" : "DRAW",
+  "stage" : "ROUND_END",
+  "data" : {
+    "scores" : {
+      "8171f7bc-dc5f-4fba-a2fd-845c510683a0" : 0
+    },
+    "word" : "月亮",
+    "reason" : "timeout",
+    "drawerId" : "8171f7bc-dc5f-4fba-a2fd-845c510683a0"
+  },
+  "ts" : 1777774991967
+}, {
+  "gameType" : "DRAW",
+  "stage" : "GAME_OVER",
+  "data" : {
+    "scores" : {
+      "8171f7bc-dc5f-4fba-a2fd-845c510683a0" : 0
+    }
+  },
+  "ts" : 1777774991967
 } ]

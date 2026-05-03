@@ -73,7 +73,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import {computed, ref, watch, onMounted, onBeforeUnmount, watchEffect} from 'vue'
 import { useRoomStore } from '../../stores/room'
 import { useUserListStore } from '../../stores/userList'
 import { useStomp } from '../../composables/useStomp'
@@ -288,13 +288,18 @@ function applyGameState(state) {
 function applyDrawPrivate(msg) {
   if (!msg) return
   if (msg.type === 'WORD_OPTIONS') {
-    wordOptions.value = msg.options || []
+    wordOptions.value = [...(msg.options || [])]
+    console.log('[Draw] wordOptions assigned:', wordOptions.value)
   } else if (msg.type === 'WORD_REVEAL') {
     secretWord.value = msg.word
   }
 }
 
-watch(() => roomStore.lastGameState, (s) => applyGameState(s), { deep: true })
+watchEffect(() => {
+  if (roomStore.lastGameState) {
+    applyGameState(roomStore.lastGameState)
+  }
+})
 watch(() => roomStore.drawStrokes.length, (newLen, oldLen) => {
   // 只对最新到达的笔画处理
   const added = roomStore.drawStrokes.slice(oldLen || 0)
