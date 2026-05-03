@@ -6,6 +6,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.LongSupplier;
+
 @Data
 public class HostElector {
 
@@ -47,6 +48,13 @@ public class HostElector {
 
     public void onPeer(String peerId, String peerVersion) {
         onPeer(peerId, peerVersion, false, null);
+    }
+
+    /** 移除某个 peer（如收到死亡宣告后调用） */
+    public void removePeer(String peerId) {
+        if (peerId != null) {
+            peers.remove(peerId);
+        }
     }
 
     /** 设置当前 Host（由选举协议调用） */

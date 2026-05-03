@@ -13,7 +13,8 @@ public class DiscoveryMessage {
         HELLO,
         HOST_QUERY,      // 询问“谁是 Host？”
         HOST_REPLY,      // 回复“当前 Host 是 …”
-        HOST_CLAIM       // 宣布“我是 Host”或“降级，Host 是 …”
+        HOST_CLAIM,       // 宣布“我是 Host”或“降级，Host 是 …”
+        HOST_BYE         // 孩子们，想我了吗，manba out
     }
 
     private Type type;
@@ -42,6 +43,14 @@ public class DiscoveryMessage {
     public static DiscoveryMessage hostQuery(String id) {
         DiscoveryMessage m = new DiscoveryMessage();
         m.type = Type.HOST_QUERY;
+        m.id = id;
+        m.timestamp = Instant.now();
+        return m;
+    }
+
+    public static DiscoveryMessage hostBye(String id) {
+        DiscoveryMessage m = new DiscoveryMessage();
+        m.type = Type.HOST_BYE;
         m.id = id;
         m.timestamp = Instant.now();
         return m;

@@ -96,9 +96,9 @@ public class DiscoveryService implements DisposableBean {
         receiverThread.setDaemon(true);
         receiverThread.start();
 
-        log.info("[Discovery] joined {}:{} on iface={} as nodeId={} (server :{})",
+        log.info("[发现服务] 已加入组播 {}:{} 网卡={} 本机节点ID={} (HTTP端口:{})",
                 groupAddress, port,
-                networkInterface != null ? networkInterface.getName() : "default",
+                networkInterface != null ? networkInterface.getName() : "默认",
                 NodeIdGenerator.getNodeId(),
                 serverPort);
 
@@ -109,7 +109,7 @@ public class DiscoveryService implements DisposableBean {
                     "isSelf", isHost
             );
             messaging.convertAndSend("/topic/host", msg);
-            log.info("[Discovery] broadcasted HOST_CHANGED: newHost={}, isSelf={}", hostId, isHost);
+            log.info("[发现服务] 广播主机变更: 新主机={}, 本机是否为主机={}", hostId, isHost);
         });
 
         performElection();
@@ -121,7 +121,7 @@ public class DiscoveryService implements DisposableBean {
             DiscoveryMessage query = DiscoveryMessage.hostQuery(NodeIdGenerator.getNodeId());
             byte[] data = mapper.writeValueAsBytes(query);
             socket.send(new DatagramPacket(data, data.length, group, port));
-            log.info("[Discovery] sent HOST_QUERY"); // UDP日志
+            log.info("[发现服务] 已发送主机查询");
 
             long deadline = System.currentTimeMillis() + 500;
             String bestHost = null;
@@ -137,7 +137,7 @@ public class DiscoveryService implements DisposableBean {
                             DiscoveryMessage.class);
                     if (msg != null && msg.getType() == DiscoveryMessage.Type.HOST_REPLY
                             && msg.getHostId() != null) {
-                        log.debug("[Discovery] received HOST_REPLY from {}: host={}", packet.getAddress().getHostAddress(), msg.getHostId()); // UDP日志
+                        log.debug("[发现服务] 收到主机回复 来自={} 主机={}", packet.getAddress().getHostAddress(), msg.getHostId());
                         if (bestHost == null || msg.getHostId().compareTo(bestHost) < 0) {
                             bestHost = msg.getHostId();
                         }
@@ -148,41 +148,51 @@ public class DiscoveryService implements DisposableBean {
 
             if (bestHost != null) {
                 elector.setHost(bestHost);
-                log.info("[Discovery] election result: accepted existing Host {}", bestHost); // UDP日志
+                log.info("[发现服务] 选举完毕：接受现有主机 {}", bestHost);
             } else {
                 elector.setHost(NodeIdGenerator.getNodeId());
                 broadcastHostClaim(NodeIdGenerator.getNodeId());
-                log.info("[Discovery] election result: no reply, claiming self as Host"); // UDP日志
+                log.info("[发现服务] 选举完毕：未收到回复，自己成为主机");
             }
         } catch (Exception e) {
-            log.warn("[Discovery] election failed, fallback to self", e);
+            log.warn("[发现服务] 选举失败，默认自举为主机", e);
             elector.setHost(NodeIdGenerator.getNodeId());
         }
     }
 
+    // 广播主机宣告（声明自己或转发正确主机）
     private void broadcastHostClaim(String hostId) {
-        if (hostId == null) {
-            log.info("[Discovery] broadcasting resign (stepping down as Host)"); // UDP日志（退位）
-        } else {
-            log.info("[Discovery] broadcasting host claim: {}", hostId); // UDP日志
-        }
+        log.info("[发现服务] 宣告主机: {}", hostId);
         DiscoveryMessage msg = DiscoveryMessage.hostClaim(NodeIdGenerator.getNodeId(), hostId);
         try {
             byte[] data = mapper.writeValueAsBytes(msg);
             socket.send(new DatagramPacket(data, data.length, group, port));
         } catch (Exception e) {
-            log.warn("[Discovery] failed to send HOST_CLAIM: {}", e.getMessage());
+            log.warn("[发现服务] 发送主机宣告失败: {}", e.getMessage());
         }
     }
 
+    // 广播主机死亡宣告（即将下线）
+    private void broadcastHostBye() {
+        log.info("[发现服务] 宣告自己即将下线（死亡宣告）");
+        DiscoveryMessage msg = DiscoveryMessage.hostBye(NodeIdGenerator.getNodeId());
+        try {
+            byte[] data = mapper.writeValueAsBytes(msg);
+            socket.send(new DatagramPacket(data, data.length, group, port));
+        } catch (Exception e) {
+            log.warn("[发现服务] 发送死亡宣告失败: {}", e.getMessage());
+        }
+    }
+
+    // 回复主机查询
     private void sendHostReply(String targetHostId) {
-        log.info("[Discovery] sending HOST_REPLY: host={}", targetHostId); // UDP日志
+        log.info("[发现服务] 回复主机查询：当前主机为 {}", targetHostId);
         DiscoveryMessage reply = DiscoveryMessage.hostReply(NodeIdGenerator.getNodeId(), targetHostId);
         try {
             byte[] data = mapper.writeValueAsBytes(reply);
             socket.send(new DatagramPacket(data, data.length, group, port));
         } catch (Exception e) {
-            log.warn("[Discovery] failed to send HOST_REPLY: {}", e.getMessage());
+            log.warn("[发现服务] 发送主机回复失败: {}", e.getMessage());
         }
     }
 
@@ -211,10 +221,10 @@ public class DiscoveryService implements DisposableBean {
                     NodeIdGenerator.getHostname());
             byte[] data = mapper.writeValueAsBytes(msg);
             socket.send(new DatagramPacket(data, data.length, group, port));
-            log.debug("[Discovery] sent HELLO (host={})", elector.isHost()); // UDP日志
+            log.debug("[发现服务] 发送心跳 (是否主机={})", elector.isHost());
         } catch (Exception e) {
             if (running.get()) {
-                log.warn("[Discovery] send hello failed: {}", e.getMessage());
+                log.warn("[发现服务] 发送心跳失败: {}", e.getMessage());
             }
         }
     }
@@ -234,10 +244,11 @@ public class DiscoveryService implements DisposableBean {
         String url = "http://" + targetIp + ":" + serverPort + "/";
         if (openBrowser(url)) {
             openedForHostId = hostId;
-            log.info("[Discovery] opened host page: {} (selfIsHost={})", url, selfId.equals(hostId)); // 浏览器打开日志已存在
+            log.info("[发现服务] 已打开主机页面: {} (本机是否为主机={})", url, selfId.equals(hostId));
         }
     }
 
+    // 打开浏览器（保持不变）
     private boolean openBrowser(String url) {
         try {
             if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
@@ -245,7 +256,7 @@ public class DiscoveryService implements DisposableBean {
                 return true;
             }
         } catch (Exception e) {
-            log.debug("[Discovery] Desktop.browse failed: {}", e.getMessage());
+            log.debug("[发现服务] 调用系统浏览器失败: {}", e.getMessage());
         }
         try {
             String os = System.getProperty("os.name", "").toLowerCase();
@@ -260,7 +271,7 @@ public class DiscoveryService implements DisposableBean {
             pb.inheritIO().start();
             return true;
         } catch (Exception e) {
-            log.warn("[Discovery] open browser failed: {}", e.getMessage());
+            log.warn("[发现服务] 打开浏览器失败: {}", e.getMessage());
             return false;
         }
     }
@@ -285,27 +296,27 @@ public class DiscoveryService implements DisposableBean {
                         handleHostQuery(msg, senderIp);
                         break;
                     case HOST_REPLY:
-                        // 由 performElection 处理，这里仅记录
-                        log.debug("[Discovery] received HOST_REPLY from {}: host={}", senderIp, msg.getHostId()); // UDP日志
+                        // 在 performElection 中处理，这里仅记录
+                        log.debug("[发现服务] 收到主机回复 来自={} 主机={}", senderIp, msg.getHostId());
                         break;
                     case HOST_CLAIM:
                         handleHostClaim(msg, senderIp);
                         break;
+                    case HOST_BYE:
+                        handleHostBye(msg, senderIp);
+                        break;
                 }
             } catch (Exception e) {
                 if (running.get() && !socket.isClosed()) {
-                    log.warn("[Discovery] receive error: {}", e.getMessage());
+                    log.warn("[发现服务] 接收数据异常: {}", e.getMessage());
                 }
             }
         }
     }
 
     private void handleHello(DiscoveryMessage msg, String senderIp) {
-        // 跳过自己的 HELLO（组播回路）
-        if (msg.getId().equals(NodeIdGenerator.getNodeId())) {
-            return;
-        }
-        log.debug("[Discovery] received HELLO from {} (host={})", senderIp, msg.isHost()); // UDP日志
+        if (msg.getId().equals(NodeIdGenerator.getNodeId())) return;
+        log.debug("[发现服务] 收到心跳 来自={} (是否主机={})", senderIp, msg.isHost());
 
         nodeIpMap.put(msg.getId(), senderIp);
         if (msg.getHostname() != null) {
@@ -323,22 +334,23 @@ public class DiscoveryService implements DisposableBean {
     }
 
     private void handleHostQuery(DiscoveryMessage msg, String senderIp) {
-        log.info("[Discovery] received HOST_QUERY from {}", senderIp); // UDP日志
+        log.info("[发现服务] 收到主机查询 来自={}", senderIp);
         String currentHost = elector.getHostId();
         if (currentHost != null) {
             sendHostReply(currentHost);
         } else {
-            log.debug("[Discovery] no host known, ignoring HOST_QUERY");
+            log.debug("[发现服务] 尚无已知主机，忽略查询");
         }
     }
 
     private void handleHostClaim(DiscoveryMessage msg, String senderIp) {
         String claimedHost = msg.getHostId();
         if (claimedHost == null) {
-            log.info("[Discovery] received resign broadcast from ip={}", senderIp); // UDP日志（退位）
+            // 兼容旧版 null 声明（极少数情况）
+            log.info("[发现服务] 收到退位广播（旧版）来自={}", senderIp);
             return;
         }
-        log.info("[Discovery] received HOST_CLAIM from {}: host={}", senderIp, claimedHost); // UDP日志
+        log.info("[发现服务] 收到主机宣告 来自={} 主机={}", senderIp, claimedHost);
 
         String selfId = NodeIdGenerator.getNodeId();
         if (elector.getHostId() == null) {
@@ -347,14 +359,54 @@ public class DiscoveryService implements DisposableBean {
             if (claimedHost.compareTo(selfId) < 0) {
                 elector.setHost(claimedHost);
                 broadcastHostClaim(claimedHost);
-                log.info("[Discovery] stepping down, new host is {}", claimedHost);
+                log.info("[发现服务] 本机降级，新主机为 {}", claimedHost);
             }
         } else {
             if (claimedHost.compareTo(elector.getHostId()) < 0) {
                 elector.setHost(claimedHost);
-                log.info("[Discovery] updated host to {} based on claim", claimedHost);
+                log.info("[发现服务] 根据宣告更新主机为 {}", claimedHost);
             }
         }
+    }
+
+    private void handleHostBye(DiscoveryMessage msg, String senderIp) {
+        log.info("[发现服务] 收到死亡宣告 来自={}，主机已下线", senderIp);
+        // 立即删除已死亡主机的记录（如果有）
+        elector.removePeer(msg.getId());
+        // 重新选举
+        String currentHost = elector.getHostId();
+        if (currentHost != null && currentHost.equals(msg.getId())) {
+            // 如果死亡的是当前主机，立即重新选举
+            String selfId = NodeIdGenerator.getNodeId();
+            // 找出存活节点中 IP 最小的
+            String newHost = findSmallestAliveNode();
+            if (newHost != null) {
+                elector.setHost(newHost);
+                if (newHost.equals(selfId)) {
+                    broadcastHostClaim(newHost);
+                }
+                log.info("[发现服务] 重新选举完毕：新主机为 {}", newHost);
+            } else {
+                // 没有其他节点，自己成为主机
+                elector.setHost(selfId);
+                broadcastHostClaim(selfId);
+                log.info("[发现服务] 无其他存活节点，自举为主机");
+            }
+        }
+    }
+
+    // 辅助方法：找出存活节点中 IP 最小的（作为新主机）
+    private String findSmallestAliveNode() {
+        String best = null;
+        for (Map.Entry<String, String> entry : nodeIpMap.entrySet()) {
+            String nodeId = entry.getKey();
+            // 排除自己（等会儿会单独判断），但这里先包含
+            if (best == null || nodeId.compareTo(best) < 0) {
+                best = nodeId;
+            }
+        }
+        // 如果只有一个节点（就是自己），best 可能是自己，再让调用方处理
+        return best;
     }
 
     // ---------- 工具与资源管理 ----------
@@ -395,7 +447,7 @@ public class DiscoveryService implements DisposableBean {
     @Override
     public void destroy() {
         if (elector.isHost()) {
-            broadcastHostClaim(null); // 退位广播（内部已含日志）
+            broadcastHostBye(); // 发送死亡宣告，不再用 null
         }
         running.set(false);
         if (scheduler != null) {
@@ -410,6 +462,6 @@ public class DiscoveryService implements DisposableBean {
         if (receiverThread != null) {
             receiverThread.interrupt();
         }
-        log.info("[Discovery] stopped");
+        log.info("[发现服务] 已停止");
     }
 }
