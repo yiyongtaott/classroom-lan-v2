@@ -2,7 +2,6 @@ package org.lanclassroom.net.service;
 
 import org.lanclassroom.core.model.Player;
 import org.lanclassroom.core.model.Room;
-import org.lanclassroom.net.discovery.DiscoveryService;
 import org.lanclassroom.net.ws.WebSocketConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,7 +13,6 @@ import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
 import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
@@ -25,7 +23,6 @@ public class ConnectionTracker {
     private static final long OFFLINE_GRACE_MS = 15_000; // 15 秒全灰宽限期
 
     private final Room room;
-    private final DiscoveryService discovery;
     private final SimpMessagingTemplate messaging;
     private final UserStatusService userStatus;
 
@@ -33,11 +30,10 @@ public class ConnectionTracker {
     // 记录玩家首次进入全灰状态的时间戳（毫秒）
     private final Map<String, Long> offlineSince = new ConcurrentHashMap<>();
 
-    public ConnectionTracker(Room room, DiscoveryService discovery,
+    public ConnectionTracker(Room room,
                              SimpMessagingTemplate messaging,
                              UserStatusService userStatus) {
         this.room = room;
-        this.discovery = discovery;
         this.messaging = messaging;
         this.userStatus = userStatus;
     }

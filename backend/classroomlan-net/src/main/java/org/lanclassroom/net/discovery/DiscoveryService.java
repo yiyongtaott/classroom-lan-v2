@@ -202,10 +202,7 @@ public class DiscoveryService implements DisposableBean {
         UserStatusService userStatus = userStatusProvider.getIfAvailable();
         if (userStatus != null) {
             String selfIp = NodeIdGenerator.getNodeId();
-            String uuid = room.findByIp(selfIp).map(Player::getId).orElse(null);
-            if (uuid != null) {
-                userStatus.updateUdpHeartbeat(uuid, Instant.now());
-            }
+            room.findByIp(selfIp).map(Player::getId).ifPresent(uuid -> userStatus.updateUdpHeartbeat(uuid, Instant.now()));
         }
         if (autoOpenBrowser) {
             maybeOpenHostPage();
@@ -293,7 +290,7 @@ public class DiscoveryService implements DisposableBean {
                         handleHello(msg, senderIp);
                         break;
                     case HOST_QUERY:
-                        handleHostQuery(msg, senderIp);
+                        handleHostQuery(senderIp);
                         break;
                     case HOST_REPLY:
                         // 在 performElection 中处理，这里仅记录
@@ -326,14 +323,11 @@ public class DiscoveryService implements DisposableBean {
 
         UserStatusService userStatus = userStatusProvider.getIfAvailable();
         if (userStatus != null) {
-            String uuid = room.findByIp(senderIp).map(Player::getId).orElse(null);
-            if (uuid != null) {
-                userStatus.updateUdpHeartbeat(uuid, Instant.now());
-            }
+            room.findByIp(senderIp).map(Player::getId).ifPresent(uuid -> userStatus.updateUdpHeartbeat(uuid, Instant.now()));
         }
     }
 
-    private void handleHostQuery(DiscoveryMessage msg, String senderIp) {
+    private void handleHostQuery(String senderIp) {
         log.info("[发现服务] 收到主机查询 来自={}", senderIp);
         String currentHost = elector.getHostId();
         if (currentHost != null) {
@@ -416,13 +410,6 @@ public class DiscoveryService implements DisposableBean {
             return NodeIdGenerator.getHostname();
         }
         return ipHostnameMap.get(ip);
-    }
-
-    public Set<String> knownIps() {
-        Set<String> set = new HashSet<>(nodeIpMap.values());
-        set.add(NodeIdGenerator.getNodeId());
-        set.add("127.0.0.1");
-        return set;
     }
 
     private NetworkInterface pickInterface() throws SocketException {
