@@ -191,4 +191,120 @@
     }
   },
   "ts" : 1777774991967
+}, {
+  "gameType" : "DRAW",
+  "stage" : "SELECTING",
+  "data" : {
+    "drawerName" : "笔记本v123",
+    "drawerId" : "598524c1-1a6d-46c3-bbe2-8b1f78e3ccab"
+  },
+  "ts" : 1777775151778
+}, {
+  "gameType" : "DRAW",
+  "stage" : "ROUND_START",
+  "data" : {
+    "roundEndTs" : 1777775214788,
+    "roundStartTs" : 1777775154788,
+    "wordLength" : 2,
+    "drawerName" : "笔记本v123",
+    "drawerId" : "598524c1-1a6d-46c3-bbe2-8b1f78e3ccab"
+  },
+  "ts" : 1777775154788
+}, {
+  "gameType" : "DRAW",
+  "stage" : "GUESS_WRONG",
+  "data" : {
+    "guesserId" : "bd954868-49dc-4676-9929-bb45c84b3ed1",
+    "guess" : "西瓜",
+    "guesserName" : "flandretiamat"
+  },
+  "ts" : 1777775164827
+}, {
+  "gameType" : "DRAW",
+  "stage" : "GUESS_WRONG",
+  "data" : {
+    "guesserId" : "bd954868-49dc-4676-9929-bb45c84b3ed1",
+    "guess" : "测试",
+    "guesserName" : "flandretiamat"
+  },
+  "ts" : 1777775169827
+}, {
+  "gameType" : "DRAW",
+  "stage" : "GUESS_CORRECT",
+  "data" : {
+    "guesserId" : "bd954868-49dc-4676-9929-bb45c84b3ed1",
+    "scores" : {
+      "bd954868-49dc-4676-9929-bb45c84b3ed1" : 15,
+      "598524c1-1a6d-46c3-bbe2-8b1f78e3ccab" : 15
+    },
+    "guesserName" : "flandretiamat"
+  },
+  "ts" : 1777775171539
+}, {
+  "gameType" : "DRAW",
+  "stage" : "ROUND_END",
+  "data" : {
+    "drawerId" : "598524c1-1a6d-46c3-bbe2-8b1f78e3ccab",
+    "reason" : "guess",
+    "word" : "月亮",
+    "scores" : {
+      "bd954868-49dc-4676-9929-bb45c84b3ed1" : 15,
+      "598524c1-1a6d-46c3-bbe2-8b1f78e3ccab" : 15
+    }
+  },
+  "ts" : 1777775171539
+}, {
+  "gameType" : "DRAW",
+  "stage" : "SELECTING",
+  "data" : {
+    "drawerName" : "flandretiamat",
+    "drawerId" : "bd954868-49dc-4676-9929-bb45c84b3ed1"
+  },
+  "ts" : 1777775171540
+}, {
+  "gameType" : "DRAW",
+  "stage" : "ROUND_START",
+  "data" : {
+    "roundEndTs" : 1777775235633,
+    "roundStartTs" : 1777775175633,
+    "wordLength" : 2,
+    "drawerName" : "flandretiamat",
+    "drawerId" : "bd954868-49dc-4676-9929-bb45c84b3ed1"
+  },
+  "ts" : 1777775175633
+}, {
+  "gameType" : "DRAW",
+  "stage" : "GUESS_CORRECT",
+  "data" : {
+    "guesserId" : "598524c1-1a6d-46c3-bbe2-8b1f78e3ccab",
+    "scores" : {
+      "bd954868-49dc-4676-9929-bb45c84b3ed1" : 15,
+      "598524c1-1a6d-46c3-bbe2-8b1f78e3ccab" : 15
+    },
+    "guesserName" : "笔记本v123"
+  },
+  "ts" : 1777775204675
+}, {
+  "gameType" : "DRAW",
+  "stage" : "ROUND_END",
+  "data" : {
+    "drawerId" : "bd954868-49dc-4676-9929-bb45c84b3ed1",
+    "reason" : "guess",
+    "word" : "手机",
+    "scores" : {
+      "bd954868-49dc-4676-9929-bb45c84b3ed1" : 15,
+      "598524c1-1a6d-46c3-bbe2-8b1f78e3ccab" : 15
+    }
+  },
+  "ts" : 1777775204675
+}, {
+  "gameType" : "DRAW",
+  "stage" : "GAME_OVER",
+  "data" : {
+    "scores" : {
+      "bd954868-49dc-4676-9929-bb45c84b3ed1" : 15,
+      "598524c1-1a6d-46c3-bbe2-8b1f78e3ccab" : 15
+    }
+  },
+  "ts" : 1777775204676
 } ]

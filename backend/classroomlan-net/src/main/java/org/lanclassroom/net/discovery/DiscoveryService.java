@@ -150,6 +150,11 @@ public class DiscoveryService implements DisposableBean {
     }
 
     private void broadcastHostClaim(String hostId) {
+        if (hostId == null) {
+            log.info("[Discovery] broadcasting resign (stepping down as Host)");
+        } else {
+            log.info("[Discovery] broadcasting host claim: {}", hostId);
+        }
         DiscoveryMessage msg = DiscoveryMessage.hostClaim(NodeIdGenerator.getNodeId(), hostId);
         try {
             byte[] data = mapper.writeValueAsBytes(msg);
@@ -314,6 +319,7 @@ public class DiscoveryService implements DisposableBean {
 
         String selfId = NodeIdGenerator.getNodeId();
         if (elector.getHostId() == null) {
+            log.info("[Discovery] received resign broadcast from ip={}", senderIp);
             elector.setHost(claimedHost);
         } else if (elector.isHost()) {
             if (claimedHost.compareTo(selfId) < 0) {
