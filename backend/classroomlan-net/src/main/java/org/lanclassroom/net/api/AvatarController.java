@@ -2,6 +2,7 @@ package org.lanclassroom.net.api;
 
 import org.lanclassroom.core.model.Player;
 import org.lanclassroom.core.model.Room;
+import org.lanclassroom.core.service.RoomManager;
 import org.lanclassroom.net.service.AvatarStorageService;
 import org.lanclassroom.net.service.StatusBroadcastService;
 import org.springframework.core.io.FileSystemResource;
@@ -33,13 +34,13 @@ import java.util.Map;
 public class AvatarController {
 
     private final AvatarStorageService storage;
-    private final Room room;
+    private final RoomManager roomManager;
     private final StatusBroadcastService statusBroadcast;
 
-    public AvatarController(AvatarStorageService storage, Room room,
+    public AvatarController(AvatarStorageService storage, RoomManager roomManager,
                             StatusBroadcastService statusBroadcast) {
         this.storage = storage;
-        this.room = room;
+        this.roomManager = roomManager;
         this.statusBroadcast = statusBroadcast;
     }
 
@@ -47,7 +48,7 @@ public class AvatarController {
     public ResponseEntity<Map<String, String>> upload(
             @PathVariable("playerId") String playerId,
             @RequestParam("file") MultipartFile file) throws IOException {
-        Player p = room.findById(playerId).orElse(null);
+        Player p = room().findById(playerId).orElse(null);
         if (p == null) {
             return ResponseEntity.notFound().build();
         }
@@ -87,5 +88,11 @@ public class AvatarController {
         if (n.endsWith(".webp")) return MediaType.parseMediaType("image/webp");
         if (n.endsWith(".bmp")) return MediaType.parseMediaType("image/bmp");
         return MediaType.APPLICATION_OCTET_STREAM;
+    }
+
+    private Room room() {
+        Room r = roomManager.getRoom("default");
+        if (r == null) r = roomManager.createRoom("default");
+        return r;
     }
 }

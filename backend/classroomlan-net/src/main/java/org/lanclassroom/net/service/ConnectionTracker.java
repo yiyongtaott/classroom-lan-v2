@@ -2,6 +2,7 @@ package org.lanclassroom.net.service;
 
 import org.lanclassroom.core.model.Player;
 import org.lanclassroom.core.model.Room;
+import org.lanclassroom.core.service.RoomManager;
 import org.lanclassroom.net.ws.WebSocketConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +23,7 @@ public class ConnectionTracker {
 
     private static final long OFFLINE_GRACE_MS = 15_000; // 15 秒全灰宽限期
 
-    private final Room room;
+    private final RoomManager roomManager;
     private final SimpMessagingTemplate messaging;
     private final UserStatusService userStatus;
 
@@ -30,10 +31,10 @@ public class ConnectionTracker {
     // 记录玩家首次进入全灰状态的时间戳（毫秒）
     private final Map<String, Long> offlineSince = new ConcurrentHashMap<>();
 
-    public ConnectionTracker(Room room,
+    public ConnectionTracker(RoomManager roomManager,
                              SimpMessagingTemplate messaging,
                              UserStatusService userStatus) {
-        this.room = room;
+        this.roomManager = roomManager;
         this.messaging = messaging;
         this.userStatus = userStatus;
     }
@@ -43,9 +44,9 @@ public class ConnectionTracker {
         if (sessionId == null || playerId == null) return;
         String prev = sessionToPlayer.put(sessionId, playerId);
         if (prev != null) {
-            room.findById(prev).ifPresent(Player::decrementSession);
+            room().findById(prev).ifPresent(Player::decrementSession);
         }
-        room.findById(playerId).ifPresent(p -> {
+        room().findById(playerId).ifPresent(p -> {
             p.incrementSession();
             userStatus.setWsAlive(p.getId(), true);
         });
@@ -57,7 +58,7 @@ public class ConnectionTracker {
         String sid = ev.getSessionId();
         String pid = sessionToPlayer.remove(sid);
         if (pid != null) {
-            room.findById(pid).ifPresent(p -> {
+            room().findById(pid).ifPresent(p -> {
                 p.decrementSession();
                 if (p.getSessionCount() == 0) {
                     userStatus.setWsAlive(p.getId(), false);
@@ -77,7 +78,7 @@ public class ConnectionTracker {
         long now = System.currentTimeMillis();
         boolean changed = false;
 
-        for (Player p : new HashSet<>(room.getPlayers())) {
+        for (Player p : new HashSet<>(room().getPlayers())) {
             String pid = p.getId();
             if (pid == null) continue;
 
@@ -93,7 +94,7 @@ public class ConnectionTracker {
                     log.info("[ConnTrack] removing idle player {} (ip={})", p.getName(), p.getIp());
                     p.setStatus(Player.STATUS_OFFLINE);
                     userStatus.setWsAlive(pid, false);
-                    room.removePlayerById(pid);
+                    room().removePlayerById(pid);
                     offlineSince.remove(pid);
                     changed = true;
                 }
@@ -108,7 +109,17 @@ public class ConnectionTracker {
         }
     }
 
+    public String getPlayerIdBySession(String sessionId) {
+        return sessionId == null ? null : sessionToPlayer.get(sessionId);
+    }
+
     public void broadcastPlayers() {
-        messaging.convertAndSend(WebSocketConfig.TOPIC_PLAYERS, room.getPlayers());
+        messaging.convertAndSend(WebSocketConfig.TOPIC_PLAYERS, room().getPlayers());
+    }
+
+    private Room room() {
+        Room r = roomManager.getRoom("default");
+        if (r == null) r = roomManager.createRoom("default");
+        return r;
     }
 }
