@@ -47,7 +47,8 @@ public class GameController {
     public void onStart(@Payload Map<String, Object> payload) {
         String typeName = String.valueOf(payload.get("type"));
         String initiator = (String) payload.getOrDefault("playerId", null);
-        invitations.start(GameType.valueOf(typeName), initiator);
+        String target = (String) payload.getOrDefault("targetId", null);
+        invitations.start(GameType.valueOf(typeName), initiator, target);
     }
 
     @MessageMapping("/game.invitation.respond")

@@ -1,19 +1,19 @@
 <template>
-  <section class="draw-and-guess">
-    <header class="board-header">
-      <h2>🎨 你画我猜</h2>
-      <div class="meta">
-        <span v-if="phase === 'SELECTING' && isDrawer">请从 3 个候选词中选 1 个</span>
-        <span v-else-if="phase === 'SELECTING'">等待 <strong>{{ drawerName }}</strong> 选词</span>
-        <span v-else-if="phase === 'DRAWING'">
-          <strong>{{ drawerName }}</strong> 在画
-          <span v-if="!isDrawer && hint">（{{ hint }}）</span>
-          <span v-if="timeLeft > 0">· ⏱ {{ timeLeft }}s</span>
-        </span>
-        <span v-else-if="phase === 'GAME_OVER'">游戏结束</span>
-        <button class="btn small danger" @click="stop">停止游戏</button>
-      </div>
-    </header>
+  <GameBaseView title="🎨 你画我猜" @stop="stop">
+    <section class="draw-and-guess">
+      <header class="board-header">
+        <div class="meta">
+          <span v-if="phase === 'SELECTING' && isDrawer">请从 3 个候选词中选 1 个</span>
+          <span v-else-if="phase === 'SELECTING'">等待 <strong>{{ drawerName }}</strong> 选词</span>
+          <span v-else-if="phase === 'DRAWING'">
+            <strong>{{ drawerName }}</strong> 在画
+            <span v-if="!isDrawer && hint">（{{ hint }}）</span>
+            <span v-if="timeLeft > 0">· ⏱ {{ timeLeft }}s</span>
+          </span>
+          <span v-else-if="phase === 'ROUND_END'">揭晓答案中...</span>
+          <span v-else-if="phase === 'GAME_OVER'">游戏结束</span>
+        </div>
+      </header>
 
     <div class="layout">
       <!-- 左侧：候选词或画布 -->
@@ -79,6 +79,7 @@ import { useUserListStore } from '../../stores/userList'
 import { useStomp } from '../../composables/useStomp'
 import { APP } from '../../appConfig'
 import Avatar from '../../components/Avatar.vue'
+import GameBaseView from '../../components/GameBaseView.vue'
 
 const roomStore = useRoomStore()
 const userList = useUserListStore()
@@ -145,22 +146,23 @@ function pos(ev) {
   return { x: (ev.clientX - r.left) * canvasEl.value.width / r.width, y: (ev.clientY - r.top) * canvasEl.value.height / r.height }
 }
 
-function onDown(ev) {
-  if (!isDrawer.value || phase.value !== 'DRAWING') return
-  drawing.value = true
-  lastPoint.value = pos(ev)
-  buffer.value = [lastPoint.value]
-}
-
 function onMove(ev) {
   if (!drawing.value || !isDrawer.value) return
   const p = pos(ev)
   drawSegmentLocal(lastPoint.value, p)
   buffer.value.push(p)
   lastPoint.value = p
-  if (buffer.value.length >= 8) {
+  if (buffer.value.length >= 12) {
     flushStrokes()
   }
+}
+
+let strokeTimer = null
+function startStrokeTimer() {
+  if (strokeTimer) return
+  strokeTimer = setInterval(() => {
+    if (drawing.value) flushStrokes()
+  }, 50)
 }
 
 function onUp() {
@@ -169,6 +171,18 @@ function onUp() {
   }
   drawing.value = false
   lastPoint.value = null
+  if (strokeTimer) {
+    clearInterval(strokeTimer)
+    strokeTimer = null
+  }
+}
+
+function onDown(ev) {
+  if (!isDrawer.value || phase.value !== 'DRAWING') return
+  drawing.value = true
+  lastPoint.value = pos(ev)
+  buffer.value = [lastPoint.value]
+  startStrokeTimer()
 }
 
 function flushStrokes() {

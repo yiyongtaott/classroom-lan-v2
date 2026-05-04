@@ -16,6 +16,11 @@ import { API_BASE } from '../appConfig'
  */
 export const useRoomStore = defineStore('room', () => {
   const self = ref(JSON.parse(localStorage.getItem('self') || 'null'))
+  // 获取或生成设备唯一ID
+  const deviceId = ref(localStorage.getItem('deviceId') || crypto.randomUUID())
+  localStorage.setItem('deviceId', deviceId.value)
+
+  const currentRoomId = ref(localStorage.getItem('roomId') || 'default')
   const players = ref([])
   const messages = ref([])
   const gameType = ref(null)
@@ -38,6 +43,11 @@ export const useRoomStore = defineStore('room', () => {
   function setSelf(player) {
     self.value = player
     localStorage.setItem('self', JSON.stringify(player))
+  }
+
+  function setRoomId(roomId) {
+    currentRoomId.value = roomId
+    localStorage.setItem('roomId', roomId)
   }
 
   function patchSelf(patch) {
@@ -100,10 +110,10 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   async function joinAs({ name, hostname }) {
-    const res = await fetch(`${API_BASE}/room/players`, {
+    const res = await fetch(`${API_BASE}/room/${currentRoomId.value}/players`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, hostname })
+      body: JSON.stringify({ name, hostname, deviceId: deviceId.value })
     })
     if (!res.ok) throw new Error(`join failed: HTTP ${res.status}`)
     const player = await res.json()
@@ -113,7 +123,7 @@ export const useRoomStore = defineStore('room', () => {
 
   async function updateName(newName) {
     if (!self.value) throw new Error('not joined')
-    const res = await fetch(`${API_BASE}/room/players/${self.value.id}`, {
+    const res = await fetch(`${API_BASE}/room/${currentRoomId.value}/players/${self.value.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: newName })
@@ -151,7 +161,7 @@ export const useRoomStore = defineStore('room', () => {
 
   async function leave() {
     if (!self.value) return
-    try { await fetch(`${API_BASE}/room/players/${self.value.id}`, { method: 'DELETE' }) } catch {}
+    try { await fetch(`${API_BASE}/room/${currentRoomId.value}/players/${self.value.id}`, { method: 'DELETE' }) } catch {}
     clearSelf()
     players.value = []
     messages.value = []
@@ -241,10 +251,10 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   return {
-    self, players, messages, gameType, lastGameState, gameLog,
+    self, currentRoomId, players, messages, gameType, lastGameState, gameLog,
     invitation, invitationState, gameStartInfo,
     drawStrokes, drawPrivate, hasJoined, isParticipantInActiveGame,
-    setSelf, patchSelf, clearSelf, applyRoom, bootstrap, ensurePresence,
+    setSelf, patchSelf, clearSelf, setRoomId, applyRoom, bootstrap, ensurePresence,
     joinAs, updateName, uploadAvatar, clearAvatar, leave,
     appendMessage, setMessages,
     setGameState, setGameLog, setInvitation, setInvitationState, setGameStartInfo,

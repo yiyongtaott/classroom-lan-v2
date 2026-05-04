@@ -1,12 +1,13 @@
 package org.lanclassroom.app.config;
 
-import org.lanclassroom.core.model.Room;
+import org.lanclassroom.core.service.RoomManager;
 import org.lanclassroom.core.util.NodeIdGenerator;
 import org.lanclassroom.net.discovery.DiscoveryService;
 import org.lanclassroom.net.discovery.HostElector;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.stereotype.Service;
 
 /**
  * 应用层装配 - 仅声明跨模块共享 Bean。
@@ -19,8 +20,10 @@ public class AppConfig {
     private long peerTtlMs;
 
     @Bean
-    public Room room() {
-        return new Room().setHostNodeId(NodeIdGenerator.getNodeId());
+    public RoomManager roomManager() {
+        RoomManager manager = new RoomManager();
+        manager.createRoom("default");
+        return manager;
     }
 
     @Bean

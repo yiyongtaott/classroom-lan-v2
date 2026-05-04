@@ -26,15 +26,18 @@ public class PlayerController {
     private final ClientSessionRegistry registry;
     private final UserStatusService userStatus;
     private final Room room;
+    private final org.lanclassroom.net.service.StatusBroadcastService statusBroadcast;
 
     public PlayerController(ConnectionTracker tracker,
                             ClientSessionRegistry registry,
                             UserStatusService userStatus,
-                            Room room) {
+                            Room room,
+                            org.lanclassroom.net.service.StatusBroadcastService statusBroadcast) {
         this.tracker = tracker;
         this.registry = registry;
         this.userStatus = userStatus;
         this.room = room;
+        this.statusBroadcast = statusBroadcast;
     }
 
     @MessageMapping("/player.online")
@@ -45,8 +48,32 @@ public class PlayerController {
         tracker.bind(sessionId, playerId);
     }
 
+    @MessageMapping("/user.update")
+    public void updateProfile(@Payload Map<String, String> payload,
+                              SimpMessageHeaderAccessor accessor) {
+        String sid = accessor.getSessionId();
+        String ip = registry.getIpBySession(sid);
+        if (ip == null) return;
+        Player p = room.findByIp(ip).orElse(null);
+        if (p == null) return;
+
+        String newName = payload.get("name");
+        if (newName != null && !newName.isBlank()) {
+            p.setName(newName);
+        }
+        String newAvatar = payload.get("avatar");
+        if (newAvatar != null) {
+            p.setAvatar(newAvatar);
+        }
+
+        // 触发广播同步
+        statusBroadcast.broadcastUserUpdate(p);
+        log.info("[PlayerController] 用户 {} 更新资料: name={}, avatar={}", p.getId(), newName, newAvatar);
+    }
+
     /**
      * 任务 3：客户端上报 visibilityState 是否为 visible。
+
      * 服务端按 session → ip → player → userId 路径定位用户。
      */
     @MessageMapping("/user.page-active")

@@ -62,6 +62,7 @@ public class GameInvitationService {
     private final SimpMessagingTemplate messaging;
 
     private volatile Invitation current;
+    private String targetPlayerId; // 新增目标玩家ID
 
     public GameInvitationService(Room room, GameEngine engine, SimpMessagingTemplate messaging) {
         this.room = room;
@@ -70,12 +71,13 @@ public class GameInvitationService {
     }
 
     /** 发起邀请。已有未决邀请会被取消。 */
-    public synchronized Invitation start(GameType type, String initiatorId) {
+    public synchronized Invitation start(GameType type, String initiatorId, String targetId) {
         if (current != null && STATE_PENDING.equals(current.state)) {
             current.state = STATE_CANCELLED;
             broadcastInvitation();
             broadcastInvitationState();
         }
+        this.targetPlayerId = targetId; // 设置目标玩家
         Invitation inv = new Invitation();
         inv.id = UUID.randomUUID().toString();
         inv.gameType = type.name();
@@ -86,7 +88,7 @@ public class GameInvitationService {
             inv.responses.put(initiatorId, R_ACCEPT); // 发起者默认接受
         }
         current = inv;
-        log.info("[Invitation] start type={} initiator={} id={}", type, initiatorId, inv.id);
+        log.info("[Invitation] start type={} initiator={} target={} id={}", type, initiatorId, targetId, inv.id);
         broadcastInvitation();
         broadcastInvitationState();
         evaluate();
@@ -119,6 +121,26 @@ public class GameInvitationService {
         if (current == null || !STATE_PENDING.equals(current.state)) return;
         Map<String, String> rs = current.responses;
 
+        // 如果是指定玩家邀请，只检查发起者和目标玩家的响应
+        if (targetPlayerId != null) {
+            String initiatorResponse = rs.get(current.initiatorPlayerId);
+            String targetResponse = rs.get(targetPlayerId);
+
+            if (R_DECLINE.equals(initiatorResponse) || R_DECLINE.equals(targetResponse)) {
+                current.state = STATE_CANCELLED;
+                broadcastInvitation();
+                broadcastInvitationState();
+                current = null;
+                return;
+            }
+
+            if (R_ACCEPT.equals(initiatorResponse) && R_ACCEPT.equals(targetResponse)) {
+                startActive("direct-accept");
+            }
+            return;
+        }
+
+        // 原有的广播逻辑
         Set<String> alive = aliveOnlinePlayerIds();
         if (alive.isEmpty()) return;
 

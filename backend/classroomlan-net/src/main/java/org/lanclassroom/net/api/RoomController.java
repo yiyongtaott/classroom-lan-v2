@@ -35,18 +35,20 @@ import java.util.Map;
 @RequestMapping("/api")
 public class RoomController {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(RoomController.class);
+
     private final HostElector elector;
-    private final Room room;
+    private final org.lanclassroom.core.service.RoomManager roomManager;
     private final GameEngine engine;
     private final DiscoveryService discovery;
     private final AvatarStorageService avatars;
     private final StatusBroadcastService statusBroadcast;
 
-    public RoomController(HostElector elector, Room room, GameEngine engine,
+    public RoomController(HostElector elector, org.lanclassroom.core.service.RoomManager roomManager, GameEngine engine,
                           DiscoveryService discovery, AvatarStorageService avatars,
                           StatusBroadcastService statusBroadcast) {
         this.elector = elector;
-        this.room = room;
+        this.roomManager = roomManager;
         this.engine = engine;
         this.discovery = discovery;
         this.avatars = avatars;
@@ -55,12 +57,20 @@ public class RoomController {
 
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> status(HttpServletRequest req) {
+        log.debug("[房间接口] 查询状态 IP={}", resolveDisplayIp(req));
         String accessorIp = resolveDisplayIp(req);
         return ResponseEntity.ok(statusBroadcast.buildStatusFor(accessorIp));
     }
 
     @GetMapping("/room")
-    public ResponseEntity<RoomSnapshot> snapshot() {
+    public ResponseEntity<RoomSnapshot> snapshotDefault() {
+        return snapshot("default");
+    }
+
+    @GetMapping("/room/{roomId}")
+    public ResponseEntity<RoomSnapshot> snapshot(@PathVariable String roomId) {
+        Room room = roomManager.getRoom(roomId);
+        if (room == null) return ResponseEntity.notFound().build();
         room.setHostNodeId(elector.getHostId());
         return ResponseEntity.ok(room.snapshot());
     }
@@ -72,9 +82,13 @@ public class RoomController {
     @GetMapping("/me")
     public ResponseEntity<Player> me(HttpServletRequest req) {
         String ip = resolveDisplayIp(req);
-        return room.findByIp(ip)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+
+        // 查找所有房间中的玩家
+        for (Room room : roomManager.getAllRooms().values()) {
+            Player p = room.findByIp(ip).orElse(null);
+            if (p != null) return ResponseEntity.ok(p);
+        }
+        return ResponseEntity.notFound().build();
     }
 
     /**
@@ -82,17 +96,35 @@ public class RoomController {
      * Bug 4: 同 IP 已有 player → 直接返回（可选更新 name）。
      * BUG-02: 改名后必广播 user.update。
      */
-    @PostMapping("/room/players")
-    public ResponseEntity<Player> joinRoom(@RequestBody Map<String, String> body,
+    @PostMapping("/room/{roomId}/players")
+    public ResponseEntity<Player> joinRoom(@PathVariable String roomId,
+                                           @RequestBody Map<String, String> body,
                                            HttpServletRequest req) {
+        Room room = roomManager.getRoom(roomId);
+        if (room == null) room = roomManager.createRoom(roomId);
+
+        String deviceId = body == null ? null : body.get("deviceId");
         String name = body == null ? null : body.get("name");
         String hostname = body == null ? null : body.get("hostname");
         String accessorIp = resolveDisplayIp(req);
 
-        // 同 IP 已有玩家 → 复用
-        Player existing = room.findByIp(accessorIp).orElse(null);
+        // 优先使用 deviceId 识别（如果客户端支持）
+        Player existing = null;
+        if (deviceId != null && !deviceId.isBlank()) {
+            existing = room.findById(deviceId).orElse(null);
+        }
+
+        // 兼容旧逻辑：IP 查找
+        if (existing == null) {
+            existing = room.findByIp(accessorIp).orElse(null);
+        }
+
         if (existing != null) {
             boolean changed = false;
+            // 更新 ID 逻辑
+            if (deviceId != null && !deviceId.equals(existing.getId())) {
+                 existing.setId(deviceId); // 强制绑定新 ID
+            }
             if (name != null && !name.isBlank() && !name.equals(existing.getName())) {
                 avatars.renameUser(existing.getName(), name.trim());
                 existing.setName(name.trim());
@@ -103,9 +135,11 @@ public class RoomController {
                 changed = true;
             }
             // 用最新头像（按用户名查）
-            avatars.avatarUrlOf(existing.getName()).ifPresent(url -> {
-                if (!url.equals(existing.getAvatar())) existing.setAvatar(url);
-            });
+            String currentAvatar = existing.getAvatar();
+            String avatarUrl = avatars.avatarUrlOf(existing.getName()).orElse(null);
+            if (avatarUrl != null && !avatarUrl.equals(currentAvatar)) {
+                existing.setAvatar(avatarUrl);
+            }
             if (changed) {
                 statusBroadcast.broadcastUserUpdate(existing);
                 statusBroadcast.broadcastRoom();
@@ -120,12 +154,14 @@ public class RoomController {
                     ? hostname
                     : (accessorIp != null ? accessorIp : "玩家"));
 
-        Player player = new Player(finalName)
+        String finalId = (deviceId != null && !deviceId.isBlank()) ? deviceId : java.util.UUID.randomUUID().toString();
+        Player player = new Player(finalName).setId(finalId)
                 .setIp(accessorIp)
                 .setHostname(hostname);
 
         // 已有头像 map 命中则恢复
-        avatars.avatarUrlOf(finalName).ifPresent(player::setAvatar);
+        String avatarUrl = avatars.avatarUrlOf(finalName).orElse(null);
+        if (avatarUrl != null) player.setAvatar(avatarUrl);
 
         room.addPlayer(player);
         statusBroadcast.broadcastRoom();
@@ -133,8 +169,16 @@ public class RoomController {
         return ResponseEntity.ok(player);
     }
 
-    @DeleteMapping("/room/players/{id}")
-    public ResponseEntity<Void> leaveRoom(@PathVariable("id") String id) {
+    @PostMapping("/room/players")
+    public ResponseEntity<Player> joinRoomDefault(@RequestBody Map<String, String> body,
+                                           HttpServletRequest req) {
+        return joinRoom("default", body, req);
+    }
+
+    @DeleteMapping("/room/{roomId}/players/{id}")
+    public ResponseEntity<Void> leaveRoom(@PathVariable String roomId, @PathVariable String id) {
+        Room room = roomManager.getRoom(roomId);
+        if (room == null) return ResponseEntity.notFound().build();
         if (room.removePlayerById(id)) {
             statusBroadcast.broadcastRoom();
             statusBroadcast.broadcastStatus();
@@ -143,9 +187,12 @@ public class RoomController {
     }
 
     /** BUG-02：改名 / 改头像后必广播 user.update。 */
-    @PutMapping("/room/players/{id}")
-    public ResponseEntity<Player> updatePlayer(@PathVariable("id") String id,
+    @PutMapping("/room/{roomId}/players/{id}")
+    public ResponseEntity<Player> updatePlayer(@PathVariable String roomId,
+                                               @PathVariable String id,
                                                @RequestBody Map<String, String> body) {
+        Room room = roomManager.getRoom(roomId);
+        if (room == null) return ResponseEntity.notFound().build();
         Player p = room.findById(id).orElse(null);
         if (p == null) {
             return ResponseEntity.notFound().build();
@@ -177,8 +224,10 @@ public class RoomController {
         return ResponseEntity.ok(p);
     }
 
-    @GetMapping("/games")
-    public ResponseEntity<Map<String, Object>> listGames() {
+    @GetMapping("/room/{roomId}/games")
+    public ResponseEntity<Map<String, Object>> listGames(@PathVariable String roomId) {
+        Room room = roomManager.getRoom(roomId);
+        if (room == null) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(Map.of(
                 "registered", engine.registeredGames().keySet(),
                 "active", room.getGameType()

@@ -103,13 +103,19 @@ public class DiscoveryService implements DisposableBean {
                 serverPort);
 
         elector.addListener((isHost, hostId) -> {
-            Map<String, Object> msg = Map.of(
-                    "type", "HOST_CHANGED",
-                    "newHostId", hostId,
-                    "isSelf", isHost
-            );
+            String selfId = NodeIdGenerator.getNodeId();
+            String targetIp = selfId.equals(hostId) ? "localhost" : nodeIpMap.get(hostId);
+            String type = isHost ? "HOST_CONFIRMED" : "HOST_CHANGED";
+
+            Map<String, Object> msg = new HashMap<>();
+            msg.put("type", type);
+            msg.put("hostId", hostId);
+            msg.put("hostIp", targetIp != null ? targetIp : "unknown");
+            msg.put("hostPort", serverPort);
+            msg.put("isSelf", isHost);
+
             messaging.convertAndSend("/topic/host", msg);
-            log.info("[发现服务] 广播主机变更: 新主机={}, 本机是否为主机={}", hostId, isHost);
+            log.info("[发现服务] 广播主机变更: 新主机={}, 本机是否为主机={}, 类型={}", hostId, isHost, type);
         });
 
         performElection();
@@ -282,7 +288,7 @@ public class DiscoveryService implements DisposableBean {
                 socket.receive(packet);
                 String json = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8);
                 DiscoveryMessage msg = mapper.readValue(json, DiscoveryMessage.class);
-                if (msg == null || msg.getId() == null) continue;
+                if (msg == null || msg.getId() == null || msg.getType() == null) continue;
                 String senderIp = packet.getAddress().getHostAddress();
 
                 switch (msg.getType()) {

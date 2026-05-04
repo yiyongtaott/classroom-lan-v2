@@ -7,11 +7,13 @@ import org.lanclassroom.core.service.Broadcaster;
 import org.lanclassroom.core.service.GameSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import org.lanclassroom.net.games.*;
 
 /**
  * 游戏引擎 - 注册中心 + 调度器。
@@ -33,36 +35,65 @@ public class GameEngine {
         this.broadcaster = broadcaster;
         for (GameSession s : sessions) {
             registry.put(s.getType(), s);
-            log.info("[GameEngine] registered {} → {}", s.getType(), s.getClass().getSimpleName());
+            log.info("[游戏引擎] 已注册游戏 {} → {}", s.getType(), s.getClass().getSimpleName());
         }
     }
 
     public synchronized void startGame(GameType type) {
         GameSession session = registry.get(type);
         if (session == null) {
-            throw new IllegalArgumentException("No GameSession registered for: " + type);
+            throw new IllegalArgumentException("未找到对应的游戏会话: " + type);
         }
         stopCurrent();
         room.setGameType(type);
         room.setGameSession(session);
         session.start(room, broadcaster);
-        log.info("[GameEngine] started {}", type);
+        log.info("[游戏引擎] 启动游戏 {}", type);
     }
 
     public synchronized void dispatchAction(Player player, Map<String, Object> payload) {
         GameSession session = room.getGameSession();
         if (session == null) {
-            log.warn("[GameEngine] action ignored - no active game");
+            log.warn("[游戏引擎] 动作被忽略 - 无活跃游戏");
             return;
         }
         session.handleAction(player, payload);
+
+        // If it's DrawAndGuess, we might want to handle the watchdog check differently
+        // but usually, GameEngine should have a periodic tick.
+    }
+
+    /**
+     * Periodic tick called by a scheduler to handle game-specific time-outs or logic.
+     */
+    @Scheduled(fixedRate = 1000)
+    public synchronized void tick() {
+        GameSession session = room.getGameSession();
+        if (session == null) return;
+
+        if (session instanceof DrawAndGuessGame) {
+            ((DrawAndGuessGame) session).watchdog();
+        } else if (session instanceof TetrisGame) {
+            ((TetrisGame) session).watchdog();
+        } else if (session instanceof SnakeGame) {
+            ((SnakeGame) session).watchdog();
+        } else if (session instanceof FlappyBirdGame) {
+            ((FlappyBirdGame) session).watchdog();
+        } else if (session instanceof BreakoutGame) {
+            ((BreakoutGame) session).watchdog();
+        } else if (session instanceof TankGame) {
+            ((TankGame) session).watchdog();
+        } else if (session instanceof BombermanGame) {
+            ((BombermanGame) session).watchdog();
+        }
+        // Other games with watchdog/tick logic will be added here.
     }
 
     public synchronized void stopCurrent() {
         GameSession s = room.getGameSession();
         if (s != null) {
             s.stop();
-            log.info("[GameEngine] stopped {}", s.getType());
+            log.info("[游戏引擎] 停止游戏 {}", s.getType());
         }
         room.setGameSession(null);
         room.setGameType(null);

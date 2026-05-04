@@ -184,14 +184,22 @@ public class DrawAndGuessGame implements GameSession {
                 "word", currentWord,
                 "scores", scores
         ));
-        if (currentDrawerIdx >= drawerOrder.size() - 1) {
-            // 所有人都画过一轮 → 游戏结束
-            broadcastEnvelope("GAME_OVER", Map.of("scores", scores));
-            running = false;
-            phase = "GAME_OVER";
-        } else {
-            nextRound();
-        }
+        phase = "ROUND_END";
+
+        // 延迟 3 秒进入下一轮，给用户看答案的时间
+        java.util.concurrent.CompletableFuture.delayedExecutor(3, java.util.concurrent.TimeUnit.SECONDS)
+                .execute(() -> {
+                    synchronized (this) {
+                        if (!running) return;
+                        if (currentDrawerIdx >= drawerOrder.size() - 1) {
+                            broadcastEnvelope("GAME_OVER", Map.of("scores", scores));
+                            running = false;
+                            phase = "GAME_OVER";
+                        } else {
+                            nextRound();
+                        }
+                    }
+                });
     }
 
     private void nextRound() {

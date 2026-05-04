@@ -1,5 +1,9 @@
 package org.lanclassroom.core.model;
 
+import lombok.Data;
+import lombok.Getter;
+import org.springframework.stereotype.Component;
+
 import java.util.UUID;
 
 /**
@@ -9,6 +13,8 @@ import java.util.UUID;
  *   PAGE_CLOSED  - 浏览器关了，但后端 jar 仍在 LAN（保留账号信息）
  *   OFFLINE      - 后端 jar 也下线（即将清除）
  */
+@Data
+@Component
 public class Player {
 
     public static final String STATUS_ONLINE = "ONLINE";
@@ -39,34 +45,24 @@ public class Player {
         this.lastSeenMs = this.joinTime;
     }
 
-    public String getId() { return id; }
     public Player setId(String id) { this.id = id; return this; }
 
-    public String getName() { return name; }
     public Player setName(String name) { this.name = name; return this; }
 
-    public String getHostname() { return hostname; }
     public Player setHostname(String hostname) { this.hostname = hostname; return this; }
 
-    public String getIp() { return ip; }
     public Player setIp(String ip) { this.ip = ip; return this; }
 
-    public String getAvatar() { return avatar; }
     public Player setAvatar(String avatar) { this.avatar = avatar; return this; }
 
-    public boolean isHost() { return host; }
     public Player setHost(boolean host) { this.host = host; return this; }
 
-    public long getJoinTime() { return joinTime; }
     public Player setJoinTime(long joinTime) { this.joinTime = joinTime; return this; }
 
-    public String getStatus() { return status; }
     public Player setStatus(String status) { this.status = status; return this; }
 
-    public long getLastSeenMs() { return lastSeenMs; }
     public Player setLastSeenMs(long lastSeenMs) { this.lastSeenMs = lastSeenMs; return this; }
 
-    public int getSessionCount() { return sessionCount; }
     public Player setSessionCount(int sessionCount) { this.sessionCount = sessionCount; return this; }
 
     public Player incrementSession() {

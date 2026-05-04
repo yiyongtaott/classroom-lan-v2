@@ -25,6 +25,21 @@ public class DiscoveryMessage {
     private String hostId;      // 用于 HOST_REPLY / HOST_CLAIM
     private Instant timestamp;
 
+    public Type getType() { return type; }
+    public void setType(Type type) { this.type = type; }
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public String getVersion() { return version; }
+    public void setVersion(String version) { this.version = version; }
+    public boolean isHost() { return host; }
+    public void setHost(boolean host) { this.host = host; }
+    public String getHostname() { return hostname; }
+    public void setHostname(String hostname) { this.hostname = hostname; }
+    public String getHostId() { return hostId; }
+    public void setHostId(String hostId) { this.hostId = hostId; }
+    public Instant getTimestamp() { return timestamp; }
+    public void setTimestamp(Instant timestamp) { this.timestamp = timestamp; }
+
     public DiscoveryMessage() {}
 
     // 原有工厂方法

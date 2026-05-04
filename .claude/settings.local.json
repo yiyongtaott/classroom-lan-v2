@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(alert.bat *)",
+      "Bash(cmd *)",
+      "Bash(mvn clean *)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(read_file *)",
+      "Bash(./mvnw clean *)"
+    ]
+  }
+}

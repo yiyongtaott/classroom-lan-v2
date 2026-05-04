@@ -9,6 +9,8 @@ import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * STOMP 消息总线配置。
@@ -44,6 +46,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public static final String QUEUE_PRIVATE_CHAT = "/queue/private.chat";
     public static final String QUEUE_PRIVATE_INVITE = "/queue/private.invite";
     public static final String QUEUE_DRAW_PRIVATE = "/queue/game.draw";
+    public static final String QUEUE_SPY_PRIVATE = "/queue/game.spy";
 
     private final IpHandshakeInterceptor ipHandshakeInterceptor;
 
@@ -69,14 +72,34 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     /**
      * 把 SimpMessagingTemplate 适配为 core 模块的 Broadcaster 接口。
-     * 同时记入 GameHistoryService（写历史 + 广播）。
+     * 优化：简单限流（Throttling）以防网络洪流。
      */
     @Bean
-    public Broadcaster gameStateBroadcaster(SimpMessagingTemplate template,
-                                            GameHistoryService history) {
-        return state -> {
-            history.append(state);
-            template.convertAndSend(TOPIC_GAME_STATE, state);
+    public Broadcaster gameBroadcaster(SimpMessagingTemplate template) {
+        return new Broadcaster() {
+            private final Map<String, Long> lastBroadcast = new ConcurrentHashMap<>();
+            private static final long MIN_INTERVAL_MS = 30; // 限制为约 30fps
+
+            @Override
+            public void broadcast(Object state) {
+                String type = "default";
+                if (state instanceof Map) {
+                    Map<String, Object> map = (Map<String, Object>) state;
+                    type = (String) map.getOrDefault("type", "unknown");
+                }
+
+                // 对高频动作做限流
+                if ("DRAW_STROKE".equals(type) || "MOVE".equals(type) || "TICK".equals(type)) {
+                    long now = System.currentTimeMillis();
+                    if (now - lastBroadcast.getOrDefault(type, 0L) < MIN_INTERVAL_MS) {
+                        return;
+                    }
+                    lastBroadcast.put(type, now);
+                }
+
+                String channel = "/topic/game." + type.toLowerCase();
+                template.convertAndSend(channel, state);
+            }
         };
     }
 }

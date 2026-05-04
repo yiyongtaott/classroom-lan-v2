@@ -98,15 +98,17 @@ export function useWebSocket() {
     track(stomp.subscribe(TOPIC.HOST, (msg) => {
       if (!msg) return
       appStore.applyHostChange(msg)
-      // 当前页面正以非新 host 身份运行 → 跳转
-      if (msg.type === 'HOST_CHANGED' && msg.newHostId && !msg.isSelf) {
+      // 收到 HOST_CHANGED：当前页面是旧 Host 的页面，通知并跳转
+      if (msg.type === 'HOST_CHANGED' && !msg.isSelf) {
         toastStore.push({
           type: 'warn', icon: '🔁', durationMs: 4000,
-          title: 'Host 已切换', body: `正在跳转到 ${msg.newHostId}…`
+          title: 'Host 已切换', body: `正在跳转到新主机 ${msg.hostIp}...`
         })
-        // 简单跳转策略：刷新当前页 → 浏览器重新解析 host 域名
-        // 为了简化，仅在当前 host 与 selfId 相同（即旧 host 自己）时强制跳走
-        // 如果已经在新 host 页面 → 不需要跳
+        setTimeout(() => {
+          if (msg.hostIp && msg.hostPort) {
+            window.location.href = `http://${msg.hostIp}:${msg.hostPort}/`
+          }
+        }, 2000)
       }
     }))
 
