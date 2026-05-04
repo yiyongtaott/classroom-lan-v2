@@ -2,6 +2,7 @@ package org.lanclassroom.net.service;
 
 import org.lanclassroom.core.model.Player;
 import org.lanclassroom.core.model.Room;
+import org.lanclassroom.core.service.RoomManager;
 import org.lanclassroom.core.util.NodeIdGenerator;
 import org.lanclassroom.net.discovery.DiscoveryService;
 import org.lanclassroom.net.discovery.HostElector;
@@ -34,16 +35,16 @@ public class StatusBroadcastService {
     private static final Logger log = LoggerFactory.getLogger(StatusBroadcastService.class);
 
     private final HostElector elector;
-    private final Room room;
+    private final RoomManager roomManager;
     private final DiscoveryService discovery;
     private final SimpMessagingTemplate messaging;
 
     private final AtomicReference<String> lastHostId = new AtomicReference<>("");
 
-    public StatusBroadcastService(HostElector elector, Room room,
+    public StatusBroadcastService(HostElector elector, RoomManager roomManager,
                                   DiscoveryService discovery, SimpMessagingTemplate messaging) {
         this.elector = elector;
-        this.room = room;
+        this.roomManager = roomManager;
         this.discovery = discovery;
         this.messaging = messaging;
     }
@@ -63,18 +64,18 @@ public class StatusBroadcastService {
         result.put("hostNodeId", elector.getHostId());
         result.put("hostHostname", NodeIdGenerator.getHostname());
         result.put("peerCount", elector.peerCount());
-        result.put("playerCount", room.getPlayers().size());
-        result.put("gameType", room.getGameType());
+        result.put("playerCount", room().getPlayers().size());
+        result.put("gameType", room().getGameType());
         return result;
     }
 
     public Map<String, Object> buildRoomSnapshot() {
-        room.setHostNodeId(elector.getHostId());
+        room().setHostNodeId(elector.getHostId());
         Map<String, Object> snap = new HashMap<>();
         snap.put("hostNodeId", elector.getHostId());
-        snap.put("gameType", room.getGameType());
-        snap.put("players", List.copyOf(room.getPlayers()));
-        snap.put("playerCount", room.getPlayers().size());
+        snap.put("gameType", room().getGameType());
+        snap.put("players", List.copyOf(room().getPlayers()));
+        snap.put("playerCount", room().getPlayers().size());
         return snap;
     }
 
@@ -84,8 +85,8 @@ public class StatusBroadcastService {
         shared.put("hostNodeId", elector.getHostId());
         shared.put("hostHostname", NodeIdGenerator.getHostname());
         shared.put("peerCount", elector.peerCount());
-        shared.put("playerCount", room.getPlayers().size());
-        shared.put("gameType", room.getGameType());
+        shared.put("playerCount", room().getPlayers().size());
+        shared.put("gameType", room().getGameType());
         messaging.convertAndSend(WebSocketConfig.TOPIC_STATUS, shared);
 
         // 检测 host 变更 → 通知所有客户端
@@ -109,7 +110,7 @@ public class StatusBroadcastService {
     }
 
     public void broadcastPlayers() {
-        messaging.convertAndSend(WebSocketConfig.TOPIC_PLAYERS, room.getPlayers());
+        messaging.convertAndSend(WebSocketConfig.TOPIC_PLAYERS, room().getPlayers());
     }
 
     /** 单个用户改名 / 改头像 → 增量更新（BUG-02 修复）。 */
@@ -139,5 +140,11 @@ public class StatusBroadcastService {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    private Room room() {
+        Room r = roomManager.getRoom("default");
+        if (r == null) r = roomManager.createRoom("default");
+        return r;
     }
 }
