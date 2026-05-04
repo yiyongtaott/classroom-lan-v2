@@ -27,10 +27,10 @@
         <p style="text-align: center; font-size: 1.1rem; margin-bottom: 1rem;">
           最终得分: <strong style="color: #409eff; font-size: 1.5rem;">{{ score }}</strong>
         </p>
-        <template #footer>
+      </div>
+      <template #footer>
           <el-button type="primary" @click="restart">重新开始</el-button>
         </template>
-      </div>
     </el-dialog>
   </GameBaseView>
 </template>

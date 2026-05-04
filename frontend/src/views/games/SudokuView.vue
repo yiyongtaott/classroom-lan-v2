@@ -38,10 +38,10 @@
         <p style="text-align: center; font-size: 1.1rem; margin-bottom: 1rem;">
           你成功解决了这个数独！
         </p>
-        <template #footer>
+      </div>
+      <template #footer>
           <el-button type="primary" @click="restart">重新开始</el-button>
         </template>
-      </div>
     </el-dialog>
   </GameBaseView>
 </template>

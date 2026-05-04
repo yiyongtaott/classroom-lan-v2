@@ -52,7 +52,7 @@ public class WebSocketEventListener {
                                   GameHistoryService gameHistory,
                                   GameInvitationService invitations,
                                   UserStatusService userStatus,
-                                  Room room) {
+                                  RoomManager roomManager) {
         this.registry = registry;
         this.messaging = messaging;
         this.statusService = statusService;

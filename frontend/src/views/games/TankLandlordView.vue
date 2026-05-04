@@ -53,10 +53,10 @@
         <p style="text-align: center; font-size: 1.1rem; margin-bottom: 1rem;">
           战斗已结束! 🏁
         </p>
-        <template #footer>
+      </div>
+      <template #footer>
           <el-button type="primary" @click="restart">重新挑战</el-button>
         </template>
-      </div>
     </el-dialog>
   </GameBaseView>
 </template>

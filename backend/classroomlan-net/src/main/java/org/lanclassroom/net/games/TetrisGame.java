@@ -72,6 +72,7 @@ public class TetrisGame implements GameSession {
     }
 
     private void movePiece(int dr, int dc) {
+        if (currentPiece == null || gameOver) return;
         if (!checkCollision(currentPiece.r + dr, currentPiece.c + dc, currentPiece.shape)) {
             currentPiece.r += dr;
             currentPiece.c += dc;
@@ -83,6 +84,7 @@ public class TetrisGame implements GameSession {
     }
 
     private void hardDrop() {
+        if (currentPiece == null || gameOver) return;
         while (!checkCollision(currentPiece.r + 1, currentPiece.c, currentPiece.shape)) {
             currentPiece.r++;
         }
@@ -92,6 +94,7 @@ public class TetrisGame implements GameSession {
     }
 
     private void rotatePiece() {
+        if (currentPiece == null || gameOver) return;
         int[][] shape = currentPiece.shape;
         int r = shape.length;
         int c = shape[0].length;
@@ -122,6 +125,7 @@ public class TetrisGame implements GameSession {
     }
 
     private void merge() {
+        if (currentPiece == null) return;
         for (int i = 0; i < currentPiece.shape.length; i++) {
             for (int j = 0; j < currentPiece.shape[0].length; j++) {
                 if (currentPiece.shape[i][j] != 0) {
@@ -158,7 +162,7 @@ public class TetrisGame implements GameSession {
     }
 
     public synchronized void watchdog() {
-        if (gameOver) return;
+        if (gameOver || currentPiece == null) return;
         movePiece(1, 0);
         broadcastState("TICK");
     }

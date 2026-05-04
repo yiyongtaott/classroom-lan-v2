@@ -36,7 +36,7 @@ public class PrivateChatController {
 
     public PrivateChatController(SimpMessagingTemplate messaging,
                                  ClientSessionRegistry sessions,
-                                 Room room) {
+                                 RoomManager roomManager) {
         this.messaging = messaging;
         this.sessions = sessions;
         this.roomManager = roomManager;
