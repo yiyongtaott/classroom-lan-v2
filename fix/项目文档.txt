@@ -1,0 +1,231 @@
+PROJECT: classroom-lan-v2 (v3)
+
+================================
+
+1. DOMAIN OBJECT FIX (CRITICAL)
+   ================================
+
+PROBLEM:
+
+* Player / Room incorrectly annotated with @Component
+* Causes multiple inconsistent instances
+
+FIX:
+
+* Remove @Component from:
+
+  * Player
+  * Room
+
+RULE:
+
+* Domain objects MUST NOT be Spring beans
+
+ACCESS PATTERN:
+
+* Only access Room via RoomManager
+* NEVER use @Autowired Room
+* NEVER manually mix Spring-managed and new instances
+
+---
+
+================================
+2. DEPENDENCY INJECTION FIX
+===========================
+
+PROBLEM:
+
+* Null references led to misuse of @Component
+
+FIX:
+
+* Inject RoomManager instead of Room
+
+Example:
+
+@Autowired
+RoomManager roomManager;
+
+Room room = roomManager.getRoom();
+
+---
+
+================================
+3. PLAYER ID RULE (CRITICAL)
+============================
+
+PROBLEM:
+
+* Player.id can be overwritten during join
+
+FIX:
+
+* Player.id MUST be immutable
+* Remove any logic that modifies id after creation
+
+FORBIDDEN:
+existing.setId(...)
+
+---
+
+================================
+4. PLAYER DEDUPLICATION
+=======================
+
+PROBLEM:
+
+* Duplicate players allowed
+
+FIX:
+
+* Before adding player:
+
+  * Check by deviceId
+  * Return existing if found
+
+---
+
+================================
+5. IDENTITY RULE
+================
+
+PROBLEM:
+
+* Using IP as identity
+
+FIX:
+
+* Remove all IP-based identity logic
+* Use deviceId ONLY
+
+---
+
+================================
+6. UDP SOCKET USAGE
+===================
+
+PROBLEM:
+
+* Multiple threads reading same socket (race condition risk)
+
+FIX (MINIMAL):
+
+* Ensure only ONE thread calls socket.receive()
+
+NOTE:
+
+* Current implementation may work but is not guaranteed safe
+
+---
+
+================================
+7. HOST ELECTION
+================
+
+CURRENT DESIGN:
+
+* Multiple hosts possible temporarily
+* Final host = smallest IP
+
+RULE:
+
+* Keep current design (acceptable for LAN)
+
+CONSTRAINT:
+
+* Host must periodically broadcast identity
+* Other nodes must downgrade if lower IP detected
+
+---
+
+================================
+8. STATE CONSISTENCY
+====================
+
+RULE:
+
+* Host is single source of truth for:
+
+  * Room
+  * Player list
+
+CLIENT:
+
+* Must sync from host
+* Must NOT maintain independent authoritative state
+
+---
+
+================================
+9. ROOM MANAGEMENT
+==================
+
+RULE:
+
+* Only one Room instance per node
+
+ENFORCED BY:
+
+* RoomManager
+
+FORBIDDEN:
+
+* new Room() outside RoomManager
+* Injecting Room directly
+
+---
+
+================================
+10. NETWORK MODEL
+=================
+
+KEEP:
+
+* UDP → discovery + election
+* WebSocket → real-time communication
+
+NO CHANGE REQUIRED
+
+---
+
+================================
+11. IP HANDLING
+===============
+
+FIX:
+
+* Correct private IP detection:
+  172.16.0.0 – 172.31.255.255 only
+
+---
+
+================================
+12. RESOURCE HANDLER
+====================
+
+PROBLEM:
+
+* "/**" may override API routes
+
+FIX:
+
+* Ensure exclusions:
+
+  * /api/**
+  * /ws/**
+
+---
+
+================================
+RESULT
+======
+
+* Single consistent Room instance
+* No duplicate players
+* Stable identity system (deviceId)
+* Predictable host behavior
+* Reduced hidden state bugs
+
+================================
+END
+===
