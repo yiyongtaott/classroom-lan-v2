@@ -3,7 +3,6 @@ package org.lanclassroom.net.ws;
 import org.lanclassroom.core.model.GameType;
 import org.lanclassroom.core.model.Player;
 import org.lanclassroom.core.model.Room;
-import org.lanclassroom.core.service.RoomManager;
 import org.lanclassroom.net.service.GameEngine;
 import org.lanclassroom.net.service.GameInvitationService;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -33,18 +32,15 @@ public class GameController {
 
     private final GameEngine engine;
     private final GameInvitationService invitations;
-    private final RoomManager roomManager;
+    private final Room room;
     private final ClientSessionRegistry sessions;
-    private final org.lanclassroom.net.service.ConnectionTracker tracker;
 
-    public GameController(GameEngine engine, GameInvitationService invitations, RoomManager roomManager,
-                          ClientSessionRegistry sessions,
-                          org.lanclassroom.net.service.ConnectionTracker tracker) {
+    public GameController(GameEngine engine, GameInvitationService invitations, Room room,
+                          ClientSessionRegistry sessions) {
         this.engine = engine;
         this.invitations = invitations;
-        this.roomManager = roomManager;
+        this.room = room;
         this.sessions = sessions;
-        this.tracker = tracker;
     }
 
     @MessageMapping("/game.start")
@@ -99,32 +95,21 @@ public class GameController {
     private Player playerOf(Map<String, Object> payload, SimpMessageHeaderAccessor accessor) {
         String pid = payload == null ? null : (String) payload.get("playerId");
         if (pid != null) {
-            Player p = room().findById(pid).orElse(null);
-            if (p != null) return p;
-        }
-        String boundId = tracker.getPlayerIdBySession(accessor.getSessionId());
-        if (boundId != null) {
-            Player p = room().findById(boundId).orElse(null);
+            Player p = room.findById(pid).orElse(null);
             if (p != null) return p;
         }
         // 回退：从 session ip 反查
         String ip = sessions.getIpBySession(accessor.getSessionId());
         if (ip != null) {
-            Player p = room().findByIp(ip).orElse(null);
+            Player p = room.findByIp(ip).orElse(null);
             if (p != null) return p;
         }
-        return new Player(pid != null ? pid : null, "anonymous");
+        return new Player("anonymous").setId(pid != null ? pid : "");
     }
 
     private static Map<String, Object> withAction(Map<String, Object> orig, String action) {
         Map<String, Object> next = orig == null ? new HashMap<>() : new HashMap<>(orig);
         next.put("action", action);
         return next;
-    }
-
-    private Room room() {
-        Room r = roomManager.getRoom("default");
-        if (r == null) r = roomManager.createRoom("default");
-        return r;
     }
 }

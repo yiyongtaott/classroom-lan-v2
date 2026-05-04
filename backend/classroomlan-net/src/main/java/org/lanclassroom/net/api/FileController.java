@@ -2,7 +2,6 @@ package org.lanclassroom.net.api;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.lanclassroom.core.model.Room;
-import org.lanclassroom.core.service.RoomManager;
 import org.lanclassroom.net.service.FileStorageService;
 import org.lanclassroom.net.ws.ClientSessionRegistry;
 import org.lanclassroom.net.ws.WebSocketConfig;
@@ -42,16 +41,16 @@ public class FileController {
 
     private final FileStorageService storage;
     private final SimpMessagingTemplate messaging;
-    private final RoomManager roomManager;
+    private final Room room;
     private final ClientSessionRegistry sessions;
 
     public FileController(FileStorageService storage,
                           SimpMessagingTemplate messaging,
-                          RoomManager roomManager,
+                          Room room,
                           ClientSessionRegistry sessions) {
         this.storage = storage;
         this.messaging = messaging;
-        this.roomManager = roomManager;
+        this.room = room;
         this.sessions = sessions;
     }
 
@@ -64,7 +63,7 @@ public class FileController {
         String uploaderName = "匿名";
         String uploaderIp = req.getRemoteAddr();
         if (uploaderIp != null) {
-            uploaderName = room().findByIp(uploaderIp).map(p -> p.getName()).orElse(uploaderName);
+            uploaderName = room.findByIp(uploaderIp).map(p -> p.getName()).orElse(uploaderName);
         }
 
         // 兼容旧前端
@@ -115,11 +114,5 @@ public class FileController {
             return ResponseEntity.noContent().build();
         }
         return ResponseEntity.notFound().build();
-    }
-
-    private Room room() {
-        Room r = roomManager.getRoom("default");
-        if (r == null) r = roomManager.createRoom("default");
-        return r;
     }
 }

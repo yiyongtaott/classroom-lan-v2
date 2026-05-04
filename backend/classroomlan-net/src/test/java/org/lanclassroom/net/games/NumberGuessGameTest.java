@@ -30,7 +30,7 @@ class NumberGuessGameTest {
     void setUp() {
         game = new NumberGuessGame();
         room = new Room();
-        room.addPlayer(new Player("p1", "Alice"));
+        room.addPlayer(new Player("Alice").setId("p1"));
         broadcasts = new ArrayList<>();
         broadcaster = state -> broadcasts.add(asMap(state));
     }

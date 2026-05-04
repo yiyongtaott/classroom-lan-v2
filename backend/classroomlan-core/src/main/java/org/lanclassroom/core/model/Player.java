@@ -2,6 +2,7 @@ package org.lanclassroom.core.model;
 
 import lombok.Data;
 import lombok.Getter;
+import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
@@ -13,15 +14,15 @@ import java.util.UUID;
  *   OFFLINE      - 后端 jar 也下线（即将清除）
  */
 @Data
+@Component
 public class Player {
 
     public static final String STATUS_ONLINE = "ONLINE";
     public static final String STATUS_PAGE_CLOSED = "PAGE_CLOSED";
     public static final String STATUS_OFFLINE = "OFFLINE";
 
-    private final String id;
+    private String id;
     private String name;
-    private String deviceId;
     private String hostname;
     private String ip;
     private String avatar;
@@ -34,17 +35,7 @@ public class Player {
     /** 当前已连接的 STOMP session 数（>0 表示至少有一个浏览器开着该账号） */
     private int sessionCount;
 
-    public Player() {
-        this.id = UUID.randomUUID().toString();
-    }
-
-    public Player(String id, String name) {
-        this.id = (id == null || id.isBlank()) ? UUID.randomUUID().toString() : id;
-        this.name = name;
-        this.host = false;
-        this.joinTime = System.currentTimeMillis();
-        this.lastSeenMs = this.joinTime;
-    }
+    public Player() {}
 
     public Player(String name) {
         this.id = UUID.randomUUID().toString();
@@ -54,14 +45,9 @@ public class Player {
         this.lastSeenMs = this.joinTime;
     }
 
-    public String getIdentityKey() {
-        if (deviceId != null && !deviceId.isBlank()) return deviceId;
-        return id;
-    }
+    public Player setId(String id) { this.id = id; return this; }
 
     public Player setName(String name) { this.name = name; return this; }
-
-    public Player setDeviceId(String deviceId) { this.deviceId = deviceId; return this; }
 
     public Player setHostname(String hostname) { this.hostname = hostname; return this; }
 

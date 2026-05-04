@@ -3,7 +3,6 @@ package org.lanclassroom.net.service;
 import org.lanclassroom.core.model.GameType;
 import org.lanclassroom.core.model.Player;
 import org.lanclassroom.core.model.Room;
-import org.lanclassroom.core.service.RoomManager;
 import org.lanclassroom.net.ws.WebSocketConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,15 +57,15 @@ public class GameInvitationService {
     public static final String R_DECLINE = "DECLINE";
     public static final String R_FORCE = "FORCE";
 
-    private final RoomManager roomManager;
+    private final Room room;
     private final GameEngine engine;
     private final SimpMessagingTemplate messaging;
 
     private volatile Invitation current;
     private String targetPlayerId; // 新增目标玩家ID
 
-    public GameInvitationService(RoomManager roomManager, GameEngine engine, SimpMessagingTemplate messaging) {
-        this.roomManager = roomManager;
+    public GameInvitationService(Room room, GameEngine engine, SimpMessagingTemplate messaging) {
+        this.room = room;
         this.engine = engine;
         this.messaging = messaging;
     }
@@ -224,7 +223,7 @@ public class GameInvitationService {
     }
 
     private Set<String> aliveOnlinePlayerIds() {
-        return room().getPlayers().stream()
+        return room.getPlayers().stream()
                 .filter(p -> Player.STATUS_ONLINE.equals(p.getStatus()))
                 .map(Player::getId)
                 .collect(Collectors.toCollection(HashSet::new));
@@ -284,11 +283,5 @@ public class GameInvitationService {
         public String getState() { return state; }
         public Map<String, String> getResponses() { return responses; }
         public java.util.List<String> getParticipants() { return participants; }
-    }
-
-    private Room room() {
-        Room r = roomManager.getRoom("default");
-        if (r == null) r = roomManager.createRoom("default");
-        return r;
     }
 }

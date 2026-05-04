@@ -3,6 +3,7 @@ package org.lanclassroom.core.model;
 import lombok.Data;
 import lombok.Getter;
 import org.lanclassroom.core.service.GameSession;
+import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,6 +15,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * 单 Host 模型 → 整个进程内只持有一个 Room 实例。
  */
 @Data
+@Component
 public class Room {
 
     private String hostNodeId;
@@ -42,11 +44,6 @@ public class Room {
 
     public Optional<Player> findById(String playerId) {
         return players.stream().filter(p -> p.getId().equals(playerId)).findFirst();
-    }
-
-    public Optional<Player> findByDeviceId(String deviceId) {
-        if (deviceId == null || deviceId.isBlank()) return Optional.empty();
-        return players.stream().filter(p -> deviceId.equals(p.getDeviceId())).findFirst();
     }
 
     public Optional<Player> findByIp(String ip) {

@@ -2,7 +2,6 @@ package org.lanclassroom.net.ws;
 
 import org.lanclassroom.core.model.Player;
 import org.lanclassroom.core.model.Room;
-import org.lanclassroom.core.service.RoomManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -32,14 +31,14 @@ public class PrivateChatController {
 
     private final SimpMessagingTemplate messaging;
     private final ClientSessionRegistry sessions;
-    private final RoomManager roomManager;
+    private final Room room;
 
     public PrivateChatController(SimpMessagingTemplate messaging,
                                  ClientSessionRegistry sessions,
                                  Room room) {
         this.messaging = messaging;
         this.sessions = sessions;
-        this.roomManager = roomManager;
+        this.room = room;
     }
 
     @MessageMapping("/private.invite")
@@ -99,7 +98,7 @@ public class PrivateChatController {
     }
 
     private void forwardToPlayer(String playerId, String destination, Object body) {
-        Player p = room().findById(playerId).orElse(null);
+        Player p = room.findById(playerId).orElse(null);
         if (p == null || p.getIp() == null) {
             log.debug("[PrivateChat] no player or ip for {}", playerId);
             return;
@@ -117,11 +116,11 @@ public class PrivateChatController {
     private String senderId(SimpMessageHeaderAccessor accessor) {
         String ip = sessions.getIpBySession(accessor.getSessionId());
         if (ip == null) return null;
-        return room().findByIp(ip).map(Player::getId).orElse(null);
+        return room.findByIp(ip).map(Player::getId).orElse(null);
     }
 
     private String nameOf(String playerId) {
-        return room().findById(playerId).map(Player::getName).orElse("用户");
+        return room.findById(playerId).map(Player::getName).orElse("用户");
     }
 
     private static String strOrNull(Map<String, Object> map, String key) {
@@ -130,11 +129,5 @@ public class PrivateChatController {
         if (v == null) return null;
         String s = String.valueOf(v).trim();
         return s.isEmpty() ? null : s;
-    }
-
-    private Room room() {
-        Room r = roomManager.getRoom("default");
-        if (r == null) r = roomManager.createRoom("default");
-        return r;
     }
 }

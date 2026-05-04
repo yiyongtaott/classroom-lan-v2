@@ -2,7 +2,6 @@ package org.lanclassroom.net.ws;
 
 import org.lanclassroom.core.model.Player;
 import org.lanclassroom.core.model.Room;
-import org.lanclassroom.core.service.RoomManager;
 import org.lanclassroom.net.service.ConnectionTracker;
 import org.lanclassroom.net.service.UserStatusService;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -26,18 +25,18 @@ public class PlayerController {
     private final ConnectionTracker tracker;
     private final ClientSessionRegistry registry;
     private final UserStatusService userStatus;
-    private final RoomManager roomManager;
+    private final Room room;
     private final org.lanclassroom.net.service.StatusBroadcastService statusBroadcast;
 
     public PlayerController(ConnectionTracker tracker,
                             ClientSessionRegistry registry,
                             UserStatusService userStatus,
-                            RoomManager roomManager,
+                            Room room,
                             org.lanclassroom.net.service.StatusBroadcastService statusBroadcast) {
         this.tracker = tracker;
         this.registry = registry;
         this.userStatus = userStatus;
-        this.roomManager = roomManager;
+        this.room = room;
         this.statusBroadcast = statusBroadcast;
     }
 
@@ -53,13 +52,9 @@ public class PlayerController {
     public void updateProfile(@Payload Map<String, String> payload,
                               SimpMessageHeaderAccessor accessor) {
         String sid = accessor.getSessionId();
-        String playerId = tracker.getPlayerIdBySession(sid);
-        Player p = playerId == null ? null : room().findById(playerId).orElse(null);
-        if (p == null) {
-            String ip = registry.getIpBySession(sid);
-            if (ip == null) return;
-            p = room().findByIp(ip).orElse(null);
-        }
+        String ip = registry.getIpBySession(sid);
+        if (ip == null) return;
+        Player p = room.findByIp(ip).orElse(null);
         if (p == null) return;
 
         String newName = payload.get("name");
@@ -89,21 +84,11 @@ public class PlayerController {
         if (!(active instanceof Boolean)) return;
 
         String sid = accessor.getSessionId();
-        String playerId = tracker.getPlayerIdBySession(sid);
-        Player p = playerId == null ? null : room().findById(playerId).orElse(null);
-        if (p == null) {
-            String ip = registry.getIpBySession(sid);
-            if (ip == null) return;
-            p = room().findByIp(ip).orElse(null);
-        }
+        String ip = registry.getIpBySession(sid);
+        if (ip == null) return;
+        Player p = room.findByIp(ip).orElse(null);
         if (p == null) return;
 //        log.info("[PAGE_ACTIVE] playerId={} active={} 写入后 status={}", p.getId(), active, userStatus);
         userStatus.setPageActive(p.getId(), (Boolean) active);
-    }
-
-    private Room room() {
-        Room r = roomManager.getRoom("default");
-        if (r == null) r = roomManager.createRoom("default");
-        return r;
     }
 }

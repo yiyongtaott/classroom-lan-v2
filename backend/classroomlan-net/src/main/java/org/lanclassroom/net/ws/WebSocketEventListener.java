@@ -2,7 +2,6 @@ package org.lanclassroom.net.ws;
 
 import org.lanclassroom.core.model.Player;
 import org.lanclassroom.core.model.Room;
-import org.lanclassroom.core.service.RoomManager;
 import org.lanclassroom.net.service.ChatHistoryService;
 import org.lanclassroom.net.service.GameHistoryService;
 import org.lanclassroom.net.service.GameInvitationService;
@@ -43,7 +42,7 @@ public class WebSocketEventListener {
     private final GameHistoryService gameHistory;
     private final GameInvitationService invitations;
     private final UserStatusService userStatus;
-    private final RoomManager roomManager;
+    private final Room room;
 
     public WebSocketEventListener(ClientSessionRegistry registry,
                                   SimpMessagingTemplate messaging,
@@ -60,7 +59,7 @@ public class WebSocketEventListener {
         this.gameHistory = gameHistory;
         this.invitations = invitations;
         this.userStatus = userStatus;
-        this.roomManager = roomManager;
+        this.room = room;
     }
 
     @EventListener
@@ -83,7 +82,7 @@ public class WebSocketEventListener {
             log.info("[WS] connected sid={} ip={}", sessionId, clientIp);
 
             // ws 状态推送 - 只要任意 session 在线，该 ip 关联的 player 即 wsAlive=true
-            Optional<Player> p = room().findByIp(clientIp);
+            Optional<Player> p = room.findByIp(clientIp);
             p.ifPresent(player -> userStatus.setWsAlive(player.getId(), true));
         }
     }
@@ -100,7 +99,7 @@ public class WebSocketEventListener {
             String clientIp = registry.getIpBySession(sessionId);
             if (clientIp != null) {
                 // 主动查一次 player，确保状态更新
-                Player p = room().findByIp(clientIp).orElse(null);
+                Player p = room.findByIp(clientIp).orElse(null);
                 if (p != null) {
                     userStatus.setWsAlive(p.getId(), true);
                     sendInitSnapshot(sessionId, clientIp);
@@ -117,7 +116,7 @@ public class WebSocketEventListener {
 
         if (ip != null && !registry.isIpConnected(ip)) {
             // 该 IP 全部 sessions 都断了 → wsAlive = false
-            room().findByIp(ip).ifPresent(player ->
+            room.findByIp(ip).ifPresent(player ->
                     userStatus.setWsAlive(player.getId(), false));
         }
     }
@@ -137,11 +136,5 @@ public class WebSocketEventListener {
         headers.setLeaveMutable(true);
         messaging.convertAndSendToUser(sessionId, WebSocketConfig.QUEUE_INIT, payload,
                 headers.getMessageHeaders());
-    }
-
-    private Room room() {
-        Room r = roomManager.getRoom("default");
-        if (r == null) r = roomManager.createRoom("default");
-        return r;
     }
 }
