@@ -5,6 +5,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import jakarta.annotation.PostConstruct;
 import org.lanclassroom.core.model.Player;
 import org.lanclassroom.core.model.Room;
+import org.lanclassroom.core.service.RoomManager;
 import org.lanclassroom.core.util.NodeIdGenerator;
 import org.lanclassroom.net.api.DiscoveryMessage;
 import org.lanclassroom.net.service.UserStatusService;
@@ -30,7 +31,7 @@ public class DiscoveryService implements DisposableBean {
     public static final Logger log = LoggerFactory.getLogger(DiscoveryService.class);
     public static final String VERSION = "v2";
     private final SimpMessagingTemplate messaging;
-    private final Room room;
+    private final RoomManager roomManager;
 
     @Value("${app.udp.multicast-group:230.0.0.1}")
     private String groupAddress;
@@ -66,11 +67,11 @@ public class DiscoveryService implements DisposableBean {
 
     public DiscoveryService(HostElector elector,
                             ObjectProvider<UserStatusService> userStatusProvider,
-                            Room room,
+                            RoomManager roomManager,
                             SimpMessagingTemplate messaging) {
         this.elector = elector;
         this.userStatusProvider = userStatusProvider;
-        this.room = room;
+        this.roomManager = roomManager;
         this.messaging = messaging;
     }
 
@@ -127,39 +128,13 @@ public class DiscoveryService implements DisposableBean {
             DiscoveryMessage query = DiscoveryMessage.hostQuery(NodeIdGenerator.getNodeId());
             byte[] data = mapper.writeValueAsBytes(query);
             socket.send(new DatagramPacket(data, data.length, group, port));
-            log.info("[发现服务] 已发送主机查询");
+            log.info("[发现服务] 已发送主机查询（由接收线程统一处理回复）");
 
-            long deadline = System.currentTimeMillis() + 500;
-            String bestHost = null;
-            byte[] buf = new byte[8192];
-            int oldTimeout = socket.getSoTimeout();
-            socket.setSoTimeout(100);
-            while (System.currentTimeMillis() < deadline) {
-                try {
-                    DatagramPacket packet = new DatagramPacket(buf, buf.length);
-                    socket.receive(packet);
-                    DiscoveryMessage msg = mapper.readValue(
-                            new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8),
-                            DiscoveryMessage.class);
-                    if (msg != null && msg.getType() == DiscoveryMessage.Type.HOST_REPLY
-                            && msg.getHostId() != null) {
-                        log.debug("[发现服务] 收到主机回复 来自={} 主机={}", packet.getAddress().getHostAddress(), msg.getHostId());
-                        if (bestHost == null || msg.getHostId().compareTo(bestHost) < 0) {
-                            bestHost = msg.getHostId();
-                        }
-                    }
-                } catch (SocketTimeoutException ignored) {}
-            }
-            socket.setSoTimeout(oldTimeout);
-
-            if (bestHost != null) {
-                elector.setHost(bestHost);
-                log.info("[发现服务] 选举完毕：接受现有主机 {}", bestHost);
-            } else {
-                elector.setHost(NodeIdGenerator.getNodeId());
-                broadcastHostClaim(NodeIdGenerator.getNodeId());
-                log.info("[发现服务] 选举完毕：未收到回复，自己成为主机");
-            }
+            // 避免与 receiveLoop 并发读取同一个 socket：
+            // 初始选举先自举为主机，后续由 receiveLoop 中的 HELLO/HOST_CLAIM/HOST_REPLY 驱动降级。
+            elector.setHost(NodeIdGenerator.getNodeId());
+            broadcastHostClaim(NodeIdGenerator.getNodeId());
+            log.info("[发现服务] 初始选举：本机先自举为主机，等待网络消息收敛");
         } catch (Exception e) {
             log.warn("[发现服务] 选举失败，默认自举为主机", e);
             elector.setHost(NodeIdGenerator.getNodeId());
@@ -208,7 +183,7 @@ public class DiscoveryService implements DisposableBean {
         UserStatusService userStatus = userStatusProvider.getIfAvailable();
         if (userStatus != null) {
             String selfIp = NodeIdGenerator.getNodeId();
-            room.findByIp(selfIp).map(Player::getId).ifPresent(uuid -> userStatus.updateUdpHeartbeat(uuid, Instant.now()));
+            room().findByIp(selfIp).map(Player::getId).ifPresent(uuid -> userStatus.updateUdpHeartbeat(uuid, Instant.now()));
         }
         if (autoOpenBrowser) {
             maybeOpenHostPage();
@@ -329,7 +304,7 @@ public class DiscoveryService implements DisposableBean {
 
         UserStatusService userStatus = userStatusProvider.getIfAvailable();
         if (userStatus != null) {
-            room.findByIp(senderIp).map(Player::getId).ifPresent(uuid -> userStatus.updateUdpHeartbeat(uuid, Instant.now()));
+            room().findByIp(senderIp).map(Player::getId).ifPresent(uuid -> userStatus.updateUdpHeartbeat(uuid, Instant.now()));
         }
     }
 
@@ -460,5 +435,11 @@ public class DiscoveryService implements DisposableBean {
             receiverThread.interrupt();
         }
         log.info("[发现服务] 已停止");
+    }
+
+    private Room room() {
+        Room r = roomManager.getRoom("default");
+        if (r == null) r = roomManager.createRoom("default");
+        return r;
     }
 }

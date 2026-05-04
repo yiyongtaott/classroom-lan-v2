@@ -3,6 +3,7 @@ package org.lanclassroom.net.service;
 import org.lanclassroom.core.model.GameType;
 import org.lanclassroom.core.model.Player;
 import org.lanclassroom.core.model.Room;
+import org.lanclassroom.core.service.RoomManager;
 import org.lanclassroom.core.service.Broadcaster;
 import org.lanclassroom.core.service.GameSession;
 import org.slf4j.Logger;
@@ -27,11 +28,11 @@ public class GameEngine {
     private static final Logger log = LoggerFactory.getLogger(GameEngine.class);
 
     private final Map<GameType, GameSession> registry = new ConcurrentHashMap<>();
-    private final Room room;
+    private final RoomManager roomManager;
     private final Broadcaster broadcaster;
 
-    public GameEngine(List<GameSession> sessions, Room room, Broadcaster broadcaster) {
-        this.room = room;
+    public GameEngine(List<GameSession> sessions, RoomManager roomManager, Broadcaster broadcaster) {
+        this.roomManager = roomManager;
         this.broadcaster = broadcaster;
         for (GameSession s : sessions) {
             registry.put(s.getType(), s);
@@ -45,14 +46,14 @@ public class GameEngine {
             throw new IllegalArgumentException("未找到对应的游戏会话: " + type);
         }
         stopCurrent();
-        room.setGameType(type);
-        room.setGameSession(session);
-        session.start(room, broadcaster);
+        room().setGameType(type);
+        room().setGameSession(session);
+        session.start(room(), broadcaster);
         log.info("[游戏引擎] 启动游戏 {}", type);
     }
 
     public synchronized void dispatchAction(Player player, Map<String, Object> payload) {
-        GameSession session = room.getGameSession();
+        GameSession session = room().getGameSession();
         if (session == null) {
             log.warn("[游戏引擎] 动作被忽略 - 无活跃游戏");
             return;
@@ -68,7 +69,7 @@ public class GameEngine {
      */
     @Scheduled(fixedRate = 1000)
     public synchronized void tick() {
-        GameSession session = room.getGameSession();
+        GameSession session = room().getGameSession();
         if (session == null) return;
 
         if (session instanceof DrawAndGuessGame) {
@@ -90,13 +91,13 @@ public class GameEngine {
     }
 
     public synchronized void stopCurrent() {
-        GameSession s = room.getGameSession();
+        GameSession s = room().getGameSession();
         if (s != null) {
             s.stop();
             log.info("[游戏引擎] 停止游戏 {}", s.getType());
         }
-        room.setGameSession(null);
-        room.setGameType(null);
+        room().setGameSession(null);
+        room().setGameType(null);
     }
 
     public boolean hasGame(GameType type) {
@@ -105,5 +106,11 @@ public class GameEngine {
 
     public Map<GameType, GameSession> registeredGames() {
         return Map.copyOf(registry);
+    }
+
+    private Room room() {
+        Room r = roomManager.getRoom("default");
+        if (r == null) r = roomManager.createRoom("default");
+        return r;
     }
 }

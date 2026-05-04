@@ -70,6 +70,7 @@
       </aside>
     </div>
   </section>
+  </GameBaseView>
 </template>
 
 <script setup>

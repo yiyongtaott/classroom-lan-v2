@@ -111,19 +111,19 @@ public class RoomController {
         // 优先使用 deviceId 识别（如果客户端支持）
         Player existing = null;
         if (deviceId != null && !deviceId.isBlank()) {
-            existing = room.findById(deviceId).orElse(null);
+            existing = room.findByDeviceId(deviceId).orElse(null);
         }
 
-        // 兼容旧逻辑：IP 查找
+        // 兼容旧逻辑：IP 查找（仅兜底）
         if (existing == null) {
             existing = room.findByIp(accessorIp).orElse(null);
         }
 
         if (existing != null) {
             boolean changed = false;
-            // 更新 ID 逻辑
-            if (deviceId != null && !deviceId.equals(existing.getId())) {
-                 existing.setId(deviceId); // 强制绑定新 ID
+            if (deviceId != null && !deviceId.isBlank() && !deviceId.equals(existing.getDeviceId())) {
+                existing.setDeviceId(deviceId);
+                changed = true;
             }
             if (name != null && !name.isBlank() && !name.equals(existing.getName())) {
                 avatars.renameUser(existing.getName(), name.trim());
@@ -154,8 +154,8 @@ public class RoomController {
                     ? hostname
                     : (accessorIp != null ? accessorIp : "玩家"));
 
-        String finalId = (deviceId != null && !deviceId.isBlank()) ? deviceId : java.util.UUID.randomUUID().toString();
-        Player player = new Player(finalName).setId(finalId)
+        Player player = new Player(finalName)
+                .setDeviceId(deviceId)
                 .setIp(accessorIp)
                 .setHostname(hostname);
 
